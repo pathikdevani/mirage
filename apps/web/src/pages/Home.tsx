@@ -1,15 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthProvider.js';
-import { login, logout } from '../auth/oidc.js';
+import { logout } from '../auth/oidc.js';
 import { useUiStore } from '../state/store.js';
 import { bff } from '../api/client.js';
 
 export function HomePage() {
   const auth = useAuth();
+  const navigate = useNavigate();
   const { currentOrgId, setCurrentOrgId } = useUiStore();
   const qc = useQueryClient();
   const [name, setName] = useState('');
+
+  useEffect(() => {
+    if (auth.status === 'anonymous') navigate('/login', { replace: true });
+  }, [auth.status, navigate]);
 
   const workspaces = useQuery({
     enabled: auth.status === 'authenticated' && Boolean(currentOrgId),
@@ -44,15 +50,6 @@ export function HomePage() {
         <h2 className="text-lg font-medium">Auth</h2>
         {auth.status === 'loading' && (
           <p className="mt-2 text-sm text-muted-foreground">Loading session…</p>
-        )}
-        {auth.status === 'anonymous' && (
-          <button
-            type="button"
-            onClick={() => void login()}
-            className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            Sign in with Keycloak
-          </button>
         )}
         {auth.status === 'authenticated' && auth.user && (
           <div className="mt-2 space-y-3 text-sm">

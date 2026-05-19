@@ -2,8 +2,34 @@ import { Link, Route, Routes } from 'react-router';
 import { HomePage } from './pages/Home.js';
 import { ScratchPage } from './pages/Scratch.js';
 import { AuthCallbackPage } from './pages/AuthCallback.js';
+import { LoginPage } from './pages/Login.js';
 
 export function AppRouter() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route
+        path="/"
+        element={
+          <AppShell>
+            <HomePage />
+          </AppShell>
+        }
+      />
+      <Route
+        path="/scratch"
+        element={
+          <AppShell>
+            <ScratchPage />
+          </AppShell>
+        }
+      />
+    </Routes>
+  );
+}
+
+function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <nav className="border-b bg-background/60 backdrop-blur">
@@ -16,11 +42,7 @@ export function AppRouter() {
           </Link>
         </div>
       </nav>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/scratch" element={<ScratchPage />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
-      </Routes>
+      {children}
     </>
   );
 }
