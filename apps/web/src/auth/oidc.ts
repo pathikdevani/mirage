@@ -14,7 +14,10 @@ export const userManager = new UserManager({
   response_type: 'code',
   scope: 'openid profile email',
   userStore: new WebStorageStateStore({ store: window.localStorage }),
-  loadUserInfo: true,
+  // The id_token already carries profile + email claims; hitting Keycloak's
+  // /userinfo just to re-fetch them is redundant and breaks when the realm
+  // serves signed JWT responses (Content-Type the SDK rejects).
+  loadUserInfo: false,
 });
 
 export const login = (): Promise<void> => userManager.signinRedirect();

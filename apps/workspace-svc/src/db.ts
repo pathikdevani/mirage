@@ -40,15 +40,25 @@ export async function connectDb(): Promise<MirageDb> {
  * Membership lookup conforming to `@mirage/auth`'s `MembershipResolver`.
  * Only returns the org-level row; workspace-scoped overrides are evaluated
  * per request inside the workspace routes themselves.
+ *
+ * JIT-provisioning: Keycloak's group membership is the source of truth for
+ * "is this user allowed in this org" (already verified upstream against
+ * `claims.groups`). If no Mongo row exists yet, we create one with the dev
+ * default role `editor`. Once role assignment is real (per-org admin UI),
+ * this provisioning step is replaced by an explicit invite/accept flow.
  */
 export function makeMembershipResolver(db: MirageDb) {
   return async (userId: UserId, orgId: OrgId) => {
-    const row = await db.memberships.findOne({
+    const existing = await db.memberships.findOne({
       userId,
       orgId,
       workspaceId: { $exists: false },
     });
-    return row ? { role: row.role } : null;
+    if (existing) return { role: existing.role };
+
+    const seeded: Membership = { userId, orgId, role: 'editor' };
+    await db.memberships.insertOne(seeded);
+    return { role: seeded.role };
   };
 }
 
