@@ -5,10 +5,9 @@ import { cn } from '@mirage/ui-kit';
 import { useUiStore } from '../../state/store.js';
 import { bff } from '../../api/client.js';
 
-export function WorkspaceSwitcher() {
+export function OrgSwitcher() {
   const currentOrgId = useUiStore((s) => s.currentOrgId);
-  const currentWorkspaceId = useUiStore((s) => s.currentWorkspaceId);
-  const setCurrentWorkspaceId = useUiStore((s) => s.setCurrentWorkspaceId);
+  const setCurrentOrgId = useUiStore((s) => s.setCurrentOrgId);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -30,90 +29,89 @@ export function WorkspaceSwitcher() {
     };
   }, [open]);
 
-  const workspaces = useQuery({
-    enabled: Boolean(currentOrgId),
-    queryKey: ['workspaces', currentOrgId],
+  const me = useQuery({
+    queryKey: ['me'],
     queryFn: async () => {
-      const { data, error } = await bff.GET('/workspaces');
+      const { data, error } = await bff.GET('/me');
       if (error) throw error;
       return data;
     },
   });
 
-  // Clear stale workspace selection if it's no longer in the loaded list.
   useEffect(() => {
-    if (!workspaces.data || !currentWorkspaceId) return;
-    if (!workspaces.data.some((w) => w.id === currentWorkspaceId)) {
-      setCurrentWorkspaceId(null);
+    if (!me.data) return;
+    const orgs = me.data.allOrgIds;
+    if (currentOrgId && !orgs.includes(currentOrgId)) {
+      setCurrentOrgId(null);
+      return;
     }
-  }, [workspaces.data, currentWorkspaceId, setCurrentWorkspaceId]);
+    if (!currentOrgId && orgs.length === 1 && orgs[0]) {
+      setCurrentOrgId(orgs[0]);
+    }
+  }, [me.data, currentOrgId, setCurrentOrgId]);
 
-  const currentWorkspace = workspaces.data?.find((w) => w.id === currentWorkspaceId);
-  const label = !currentOrgId
-    ? 'Select org first'
-    : currentWorkspace
-      ? currentWorkspace.name
-      : 'Select workspace';
-  const initial = currentWorkspace ? currentWorkspace.name.charAt(0).toUpperCase() : 'W';
-  const disabled = !currentOrgId;
+  const label = currentOrgId ?? 'Select org';
+  const initial = currentOrgId ? currentOrgId.charAt(0).toUpperCase() : 'O';
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
-        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
-        aria-label="Switch workspace"
+        aria-label="Switch org"
         className={cn(
           'flex h-8 items-center gap-2 rounded-full border border-input bg-background px-1.5 pr-3 text-[13px] font-medium text-foreground transition-colors',
           'hover:bg-accent',
-          disabled && 'cursor-not-allowed opacity-50 hover:bg-background',
         )}
       >
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-violet/15 text-[10px] font-semibold text-brand-violet">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-emerald/15 text-[10px] font-semibold text-brand-emerald">
           {initial}
         </span>
-        <span className="max-w-[140px] truncate">{label}</span>
+        <span>{label}</span>
         <ChevronDown size={12} strokeWidth={2.25} className="text-muted-foreground" />
       </button>
 
-      {open && !disabled && (
-        <div className="absolute left-0 top-10 z-50 w-72 rounded-lg border border-border bg-popover p-2 shadow-lg">
+      {open && (
+        <div className="absolute left-0 top-10 z-50 w-64 rounded-lg border border-border bg-popover p-2 shadow-lg">
           <label className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Workspace
+            Org
           </label>
-          {workspaces.isLoading ? (
+          {me.isLoading ? (
             <div className="mt-2 h-8 animate-pulse rounded-md bg-muted" />
-          ) : workspaces.isError ? (
+          ) : me.isError ? (
             <div className="mt-1 text-[12px] text-destructive">
-              Failed to load workspaces.{' '}
+              Failed to load orgs.{' '}
               <button
                 type="button"
-                onClick={() => void workspaces.refetch()}
+                onClick={() => void me.refetch()}
                 className="underline"
               >
                 Retry
               </button>
             </div>
-          ) : workspaces.data && workspaces.data.length === 0 ? (
+          ) : me.data && me.data.allOrgIds.length === 0 ? (
             <p className="mt-1 text-[12px] text-muted-foreground">
-              No workspaces yet in this org.
+              You are not a member of any orgs.
+            </p>
+          ) : me.data && me.data.allOrgIds.length === 1 ? (
+            <p className="mt-1 text-[13px] font-medium text-foreground">
+              {me.data.allOrgIds[0]}
             </p>
           ) : (
             <select
-              value={currentWorkspaceId ?? ''}
+              value={currentOrgId ?? ''}
               onChange={(e) => {
-                setCurrentWorkspaceId(e.target.value || null);
+                setCurrentOrgId(e.target.value || null);
                 setOpen(false);
               }}
               className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/10"
             >
               <option value="" disabled>
-                Select a workspace
+                Select an org
               </option>
-              {workspaces.data?.map((ws) => (
-                <option key={ws.id} value={ws.id}>
-                  {ws.name}
+              {me.data?.allOrgIds.map((org) => (
+                <option key={org} value={org}>
+                  {org}
                 </option>
               ))}
             </select>

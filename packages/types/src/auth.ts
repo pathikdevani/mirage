@@ -16,6 +16,19 @@ export interface AuthContext {
   allOrgIds: ReadonlyArray<OrgId>;
 }
 
+/**
+ * Lightweight per-request context for `noOrg` routes (e.g. `GET /me`). The
+ * JWT has been verified but no Org has been chosen and no membership has
+ * been resolved. Strict subset of fields derivable from the JWT alone.
+ */
+export interface AuthClaims {
+  userId: UserId;
+  /** From `claims.email`, if present in the JWT. */
+  email: string | undefined;
+  /** All orgs the user belongs to, derived from Keycloak groups. */
+  allOrgIds: ReadonlyArray<OrgId>;
+}
+
 /** Subset of Keycloak JWT claims we rely on. */
 export interface MirageJwtClaims {
   sub: string;

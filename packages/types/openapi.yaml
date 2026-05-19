@@ -27,6 +27,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
 
+  /me:
+    get:
+      summary: Current user's identity and org memberships
+      description: |
+        Returns the signed-in user plus the orgs they belong to (derived from
+        Keycloak group membership). Does not require the `X-Mirage-Org` header
+        — clients call this on app load to populate the org switcher before
+        any org has been chosen.
+      operationId: getMe
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /workspaces:
     get:
       summary: List the current org's Workspaces
@@ -99,6 +118,17 @@ components:
       properties:
         status: { type: string, enum: [ok] }
         service: { type: string }
+
+    MeResponse:
+      type: object
+      required: [userId, allOrgIds]
+      additionalProperties: false
+      properties:
+        userId: { type: string }
+        email: { type: string }
+        allOrgIds:
+          type: array
+          items: { type: string }
 
     Workspace:
       type: object

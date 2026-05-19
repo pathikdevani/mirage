@@ -1,22 +1,32 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
-import type { AuthContext } from '@mirage/types';
+import type { AuthContext, AuthClaims, UserId } from '@mirage/types';
+import { asId } from '@mirage/types';
 import {
   createKeycloakVerifier,
   JwtVerificationError,
   type KeycloakVerifierOptions,
 } from './jwt.js';
-import { resolveAuthContext, TenancyError, type MembershipResolver } from './tenancy.js';
+import {
+  resolveAuthContext,
+  deriveAllOrgIds,
+  TenancyError,
+  type MembershipResolver,
+} from './tenancy.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
-    /** Set by `mirageAuthPlugin`. Absent on routes marked `{ config: { public: true } }`. */
+    /** Set on org-scoped routes by `mirageAuthPlugin`. Absent on `public` and `noOrg` routes. */
     auth?: AuthContext;
+    /** Set on `noOrg` routes by `mirageAuthPlugin`. Absent on `public` and default routes. */
+    authClaims?: AuthClaims;
   }
 
   interface FastifyContextConfig {
-    /** When `true`, skip auth for this route (e.g. `/health`). */
+    /** When `true`, skip auth entirely (e.g. `/health`). */
     public?: boolean;
+    /** When `true`, verify the JWT and populate `request.authClaims`, but do not require `X-Mirage-Org`. */
+    noOrg?: boolean;
   }
 }
 
@@ -40,6 +50,16 @@ const plugin: FastifyPluginAsync<MirageAuthPluginOptions> = async (app, options)
 
     try {
       const claims = await verify(token);
+
+      if (request.routeOptions.config?.noOrg) {
+        request.authClaims = {
+          userId: asId<UserId>(claims.sub),
+          email: claims.email,
+          allOrgIds: deriveAllOrgIds(claims),
+        };
+        return;
+      }
+
       const orgHeader = request.headers[HEADER_ORG];
       request.auth = await resolveAuthContext({
         claims,
@@ -63,7 +83,9 @@ const plugin: FastifyPluginAsync<MirageAuthPluginOptions> = async (app, options)
  * Fastify plugin: verifies the `Authorization: Bearer …` JWT against the
  * configured Keycloak realm, then resolves an `AuthContext` (membership +
  * org scoping) and attaches it as `request.auth`. Routes marked
- * `{ config: { public: true } }` skip both steps.
+ * `{ config: { public: true } }` skip both steps. Routes marked
+ * `{ config: { noOrg: true } }` verify the JWT and attach `request.authClaims`
+ * but do not require `X-Mirage-Org`.
  */
 export const mirageAuthPlugin = fp(plugin, {
   name: '@mirage/auth',

@@ -5,6 +5,7 @@ import { mirageAuthPlugin } from '@mirage/auth/fastify';
 import type { Role, UserId, OrgId } from '@mirage/types';
 import { env } from './env.js';
 import { registerHealthRoute } from './routes/health.js';
+import { registerMeRoute } from './routes/me.js';
 import { registerWorkspaceProxyRoutes } from './routes/workspaces.js';
 import { registerWsRoute } from './routes/ws.js';
 
@@ -37,6 +38,7 @@ export async function buildServer() {
   });
 
   registerHealthRoute(app);
+  registerMeRoute(app);
   registerWorkspaceProxyRoutes(app);
   registerWsRoute(app);
 

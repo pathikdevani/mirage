@@ -24,12 +24,20 @@ export class TenancyError extends Error {
 }
 
 /**
- * Build the `AuthContext` attached to every authenticated request. Trust
- * boundary: this is the only place plain strings cross into branded ids.
- *
  * Keycloak groups appear in the JWT as path strings like `/acme` or
  * `/parent/child`. We use the *leaf* segment as the `OrgId`, matching the
  * `attributes.orgId` we set in the realm import.
+ */
+export function deriveAllOrgIds(claims: MirageJwtClaims): OrgId[] {
+  return (claims.groups ?? [])
+    .map((g) => g.replace(/^\/+/, '').split('/').pop() ?? '')
+    .filter((g) => g.length > 0)
+    .map((g) => asId<OrgId>(g));
+}
+
+/**
+ * Build the `AuthContext` attached to every authenticated request. Trust
+ * boundary: this is the only place plain strings cross into branded ids.
  */
 export async function resolveAuthContext(args: {
   claims: MirageJwtClaims;
@@ -49,10 +57,7 @@ export async function resolveAuthContext(args: {
     throw new TenancyError('INVALID_ORG_HEADER', `Invalid org id: ${requestedOrgId}`);
   }
 
-  const allOrgIds = (claims.groups ?? [])
-    .map((g) => g.replace(/^\/+/, '').split('/').pop() ?? '')
-    .filter((g) => g.length > 0)
-    .map((g) => asId<OrgId>(g));
+  const allOrgIds = deriveAllOrgIds(claims);
 
   const orgId = asId<OrgId>(requestedOrgId);
   if (!allOrgIds.includes(orgId)) {

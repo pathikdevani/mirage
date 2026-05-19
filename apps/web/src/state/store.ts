@@ -9,14 +9,22 @@ import { persist } from 'zustand/middleware';
 interface UiState {
   /** Currently-selected Org (gets sent as `X-Mirage-Org` on every request). */
   currentOrgId: string | null;
+  /** Currently-selected Workspace inside `currentOrgId`. Auto-cleared when the org changes. */
+  currentWorkspaceId: string | null;
   setCurrentOrgId: (orgId: string | null) => void;
+  setCurrentWorkspaceId: (workspaceId: string | null) => void;
 }
 
 export const useUiStore = create<UiState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       currentOrgId: null,
-      setCurrentOrgId: (orgId) => set({ currentOrgId: orgId }),
+      currentWorkspaceId: null,
+      setCurrentOrgId: (orgId) => {
+        if (orgId === get().currentOrgId) return;
+        set({ currentOrgId: orgId, currentWorkspaceId: null });
+      },
+      setCurrentWorkspaceId: (workspaceId) => set({ currentWorkspaceId: workspaceId }),
     }),
     { name: 'mirage-ui' },
   ),

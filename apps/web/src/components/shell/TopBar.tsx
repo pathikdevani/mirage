@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Bell, HelpCircle, Search } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
 import { MirageLogo } from './MirageLogo.js';
+import { OrgSwitcher } from './OrgSwitcher.js';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 import { useAuth } from '../../auth/AuthProvider.js';
 import { logout } from '../../auth/oidc.js';
@@ -14,6 +15,8 @@ export function TopBar() {
         <span className="text-[15px] font-semibold tracking-tight text-foreground">
           Mirage
         </span>
+        <span className="text-muted-foreground">/</span>
+        <OrgSwitcher />
         <span className="text-muted-foreground">/</span>
         <WorkspaceSwitcher />
         <EnvBadge />
