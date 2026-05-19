@@ -11,9 +11,6 @@ pnpm-lock.yaml
 .agents/
 .claude/
 
-# Top-level authored docs (not source we lint)
-CONTEXT.md
-PRODUCT.md
-TECH_ARCHITECHRE.md
-BOOTSTRAP_PLAN.md
+# Authored docs (not source we lint)
+docs/
 README.md

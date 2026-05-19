@@ -1,8 +1,8 @@
 # Mirage
 
-Web-UI-driven fake data generation tool. Define data shapes (Schemas), bundle them into Sets, produce realistic synthetic records on demand. See [PRODUCT.md](PRODUCT.md), [CONTEXT.md](CONTEXT.md), and [TECH_ARCHITECHRE.md](TECH_ARCHITECHRE.md) for product vision, vocabulary, and technical architecture.
+Web-UI-driven fake data generation tool. Define data shapes (Schemas), bundle them into Sets, produce realistic synthetic records on demand. See [PRODUCT.md](docs/PRODUCT.md), [CONTEXT.md](docs/CONTEXT.md), and [TECH_ARCHITECHRE.md](docs/TECH_ARCHITECHRE.md) for product vision, vocabulary, and technical architecture.
 
-Bootstrap progress and remaining tasks live in [BOOTSTRAP_PLAN.md](BOOTSTRAP_PLAN.md).
+Bootstrap progress and remaining tasks live in [BOOTSTRAP_PLAN.md](docs/BOOTSTRAP_PLAN.md).
 
 ## Stack
 
@@ -72,7 +72,9 @@ mirage/
 │   ├── connectors/           Connector contract + JSON connector + stubs for csv/mongo/...
 │   ├── auth/                 Keycloak JWT verify + tenancy middleware (incl. Fastify plugin)
 │   └── ui-kit/               Tailwind v4 theme + shadcn cn() helper
-└── infra/
-    ├── docker-compose.yml    Mongo, Redis, MinIO, Keycloak, MailHog
-    └── keycloak/             Realm import (mirage realm + dev user)
+├── infra/
+│   ├── docker-compose.yml    Mongo, Redis, MinIO, Keycloak, MailHog
+│   └── keycloak/             Realm import (mirage realm + dev user)
+├── docs/                     Authored product/architecture docs
+└── design/                   Design handoff assets + screen exports
 ```
