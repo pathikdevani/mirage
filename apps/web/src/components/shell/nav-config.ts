@@ -1,0 +1,48 @@
+import {
+  Database,
+  Network,
+  Play,
+  History,
+  Download,
+  Box,
+  BookOpen,
+  Settings,
+  type LucideIcon,
+} from 'lucide-react';
+
+export interface NavItem {
+  label: string;
+  path: string;
+  icon: LucideIcon;
+}
+
+export interface NavSection {
+  section: string;
+  items: NavItem[];
+}
+
+export const NAV: NavSection[] = [
+  {
+    section: 'Workspace',
+    items: [
+      { label: 'Schemas', path: '/schemas', icon: Database },
+      { label: 'Sets', path: '/sets', icon: Box },
+      { label: 'Dependency graph', path: '/graph', icon: Network },
+      { label: 'Generate', path: '/generate', icon: Play },
+    ],
+  },
+  {
+    section: 'Activity',
+    items: [
+      { label: 'Run history', path: '/history', icon: History },
+      { label: 'Exports', path: '/connectors', icon: Download },
+    ],
+  },
+  {
+    section: 'Library',
+    items: [
+      { label: 'Faker reference', path: '/fakers', icon: BookOpen },
+      { label: 'Settings', path: '/settings', icon: Settings },
+    ],
+  },
+];

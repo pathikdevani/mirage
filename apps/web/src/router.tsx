@@ -1,48 +1,35 @@
-import { Link, Route, Routes } from 'react-router';
-import { HomePage } from './pages/Home.js';
-import { ScratchPage } from './pages/Scratch.js';
+import { Navigate, Route, Routes } from 'react-router';
+import { AppShell } from './components/shell/AppShell.js';
 import { AuthCallbackPage } from './pages/AuthCallback.js';
 import { LoginPage } from './pages/Login.js';
+import { ScratchPage } from './pages/Scratch.js';
+import { SchemasPage } from './pages/dashboard/SchemasPage.js';
+import { SetsPage } from './pages/dashboard/SetsPage.js';
+import { GraphPage } from './pages/dashboard/GraphPage.js';
+import { GeneratePage } from './pages/dashboard/GeneratePage.js';
+import { HistoryPage } from './pages/dashboard/HistoryPage.js';
+import { ConnectorsPage } from './pages/dashboard/ConnectorsPage.js';
+import { FakersPage } from './pages/dashboard/FakersPage.js';
+import { SettingsPage } from './pages/dashboard/SettingsPage.js';
 
 export function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
-      <Route
-        path="/"
-        element={
-          <AppShell>
-            <HomePage />
-          </AppShell>
-        }
-      />
-      <Route
-        path="/scratch"
-        element={
-          <AppShell>
-            <ScratchPage />
-          </AppShell>
-        }
-      />
-    </Routes>
-  );
-}
+      <Route path="/scratch" element={<ScratchPage />} />
 
-function AppShell({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <nav className="border-b bg-background/60 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-6 px-6 py-3 text-sm">
-          <Link to="/" className="font-semibold tracking-tight">
-            Mirage
-          </Link>
-          <Link to="/scratch" className="text-muted-foreground hover:text-foreground">
-            Scratch
-          </Link>
-        </div>
-      </nav>
-      {children}
-    </>
+      <Route element={<AppShell />}>
+        <Route path="/" element={<Navigate to="/schemas" replace />} />
+        <Route path="/schemas" element={<SchemasPage />} />
+        <Route path="/sets" element={<SetsPage />} />
+        <Route path="/graph" element={<GraphPage />} />
+        <Route path="/generate" element={<GeneratePage />} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/connectors" element={<ConnectorsPage />} />
+        <Route path="/fakers" element={<FakersPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+      </Route>
+    </Routes>
   );
 }
