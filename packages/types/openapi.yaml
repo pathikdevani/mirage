@@ -103,6 +103,91 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /workspaces/{wsId}/schemas:
+    parameters:
+      - in: path
+        name: wsId
+        required: true
+        schema: { type: string }
+      - in: query
+        name: key
+        required: false
+        schema: { type: string }
+        description: Optional exact-match filter on the schema key. Returns a 0- or 1-element array.
+    get:
+      summary: List Schemas in a Workspace
+      operationId: listSchemas
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Schema'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: Create a Schema in a Workspace
+      operationId: createSchema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSchemaBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /workspaces/{wsId}/schemas/{id}:
+    parameters:
+      - in: path
+        name: wsId
+        required: true
+        schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get a Schema by id
+      operationId: getSchema
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete a Schema
+      operationId: deleteSchema
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -151,13 +236,98 @@ components:
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, maxLength: 500 }
 
+    SchemaProp:
+      type: object
+      required: [name, type, required]
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        type:
+          type: string
+          enum: [string, number, integer, boolean, object, array]
+        format:
+          type: string
+          enum: [uuid, email, date, date-time]
+        required: { type: boolean }
+        faker: { type: string }
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaProp'
+        items:
+          $ref: '#/components/schemas/SchemaProp'
+
+    Schema:
+      type: object
+      required:
+        - id
+        - workspaceId
+        - orgId
+        - key
+        - name
+        - description
+        - color
+        - icon
+        - tags
+        - properties
+        - createdBy
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        orgId: { type: string }
+        key:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,39}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        color:
+          type: string
+          enum: [violet, cyan, emerald, amber, rose, slate]
+        icon: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaProp'
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateSchemaBody:
+      type: object
+      required: [key, name, color, icon, tags, properties]
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,39}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        color:
+          type: string
+          enum: [violet, cyan, emerald, amber, rose, slate]
+        icon: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        properties:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SchemaProp'
+
     ErrorResponse:
       type: object
       required: [error]
       properties:
         error: { type: string }
         code: { type: string }
-        detail: { type: string }
+        detail: {}
 
   responses:
     BadRequest:
