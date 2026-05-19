@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mirage — Sign in</title>
+<link rel="stylesheet" href="mirage.css">
+<link rel="stylesheet" href="login.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="Icon.jsx"></script>
+<script type="text/babel" src="Shell.jsx"></script>
+<script type="text/babel" src="DataTable.jsx"></script>
+<script type="text/babel" src="Pieces.jsx"></script>
+<script type="text/babel">
+const ROWS_OLD = [];
+
+function App() {
+  return (
+    <DesignCanvas title="Mirage — sign-in screens" subtitle="Three directions for the auth flow.">
+      <DCSection id="auth" title="Sign in">
+        <DCArtboard id="split" label="A. Split — product preview + form" width={1280} height={900}>
+          <LoginSplit />
+        </DCArtboard>
+        <DCArtboard id="centered" label="B. Centered — minimal card" width={1100} height={800}>
+          <LoginCentered />
+        </DCArtboard>
+        <DCArtboard id="workspace" label="C. Workspace picker — post-SSO" width={1200} height={900}>
+          <LoginWorkspace />
+        </DCArtboard>
+        <DCArtboard id="workspace-create" label="C2. Create workspace" width={1200} height={1100}>
+          <LoginWorkspaceCreate />
+        </DCArtboard>
+        <DCArtboard id="workspace-empty" label="C3. Empty — no workspaces yet" width={1200} height={900}>
+          <LoginWorkspaceEmpty />
+        </DCArtboard>
+      </DCSection>
+      <DCSection id="responsive" title="Tablet & mobile">
+        <DCArtboard id="tablet" label="D. Tablet — iPad portrait" width={820} height={1180}>
+          <LoginTablet />
+        </DCArtboard>
+        <DCArtboard id="mobile" label="E. Mobile — iPhone Pro" width={460} height={930}>
+          <LoginMobile />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+</script>
+</body>
+</html>
