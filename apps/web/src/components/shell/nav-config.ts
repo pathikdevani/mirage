@@ -21,28 +21,29 @@ export interface NavSection {
   items: NavItem[];
 }
 
+/** Paths are workspace-relative — Sidebar prepends `/workspaces/:wsId/`. */
 export const NAV: NavSection[] = [
   {
     section: 'Workspace',
     items: [
-      { label: 'Schemas', path: '/schemas', icon: Database },
-      { label: 'Sets', path: '/sets', icon: Box },
-      { label: 'Dependency graph', path: '/graph', icon: Network },
-      { label: 'Generate', path: '/generate', icon: Play },
+      { label: 'Schemas', path: 'schemas', icon: Database },
+      { label: 'Sets', path: 'sets', icon: Box },
+      { label: 'Dependency graph', path: 'graph', icon: Network },
+      { label: 'Generate', path: 'generate', icon: Play },
     ],
   },
   {
     section: 'Activity',
     items: [
-      { label: 'Run history', path: '/history', icon: History },
-      { label: 'Exports', path: '/connectors', icon: Download },
+      { label: 'Run history', path: 'history', icon: History },
+      { label: 'Exports', path: 'connectors', icon: Download },
     ],
   },
   {
     section: 'Library',
     items: [
-      { label: 'Faker reference', path: '/fakers', icon: BookOpen },
-      { label: 'Settings', path: '/settings', icon: Settings },
+      { label: 'Faker reference', path: 'fakers', icon: BookOpen },
+      { label: 'Settings', path: 'settings', icon: Settings },
     ],
   },
 ];

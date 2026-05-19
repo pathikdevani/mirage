@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate, useParams } from 'react-router';
 import { cn } from '@mirage/ui-kit';
 import { useUiStore } from '../../state/store.js';
 import { bff } from '../../api/client.js';
 
 export function WorkspaceSwitcher() {
+  const navigate = useNavigate();
+  const params = useParams<{ wsId: string }>();
   const currentOrgId = useUiStore((s) => s.currentOrgId);
-  const currentWorkspaceId = useUiStore((s) => s.currentWorkspaceId);
   const setCurrentWorkspaceId = useUiStore((s) => s.setCurrentWorkspaceId);
+  const wsIdFromUrl = params.wsId ?? null;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -40,15 +43,7 @@ export function WorkspaceSwitcher() {
     },
   });
 
-  // Clear stale workspace selection if it's no longer in the loaded list.
-  useEffect(() => {
-    if (!workspaces.data || !currentWorkspaceId) return;
-    if (!workspaces.data.some((w) => w.id === currentWorkspaceId)) {
-      setCurrentWorkspaceId(null);
-    }
-  }, [workspaces.data, currentWorkspaceId, setCurrentWorkspaceId]);
-
-  const currentWorkspace = workspaces.data?.find((w) => w.id === currentWorkspaceId);
+  const currentWorkspace = workspaces.data?.find((w) => w.id === wsIdFromUrl);
   const label = !currentOrgId
     ? 'Select org first'
     : currentWorkspace
@@ -56,6 +51,12 @@ export function WorkspaceSwitcher() {
       : 'Select workspace';
   const initial = currentWorkspace ? currentWorkspace.name.charAt(0).toUpperCase() : 'W';
   const disabled = !currentOrgId;
+
+  const handleSelect = (newWsId: string): void => {
+    setCurrentWorkspaceId(newWsId);
+    navigate(`/workspaces/${newWsId}/schemas`);
+    setOpen(false);
+  };
 
   return (
     <div ref={ref} className="relative">
@@ -79,13 +80,13 @@ export function WorkspaceSwitcher() {
 
       {open && !disabled && (
         <div className="absolute left-0 top-10 z-50 w-72 rounded-lg border border-border bg-popover p-2 shadow-lg">
-          <label className="block text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <label className="block px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Workspace
           </label>
           {workspaces.isLoading ? (
             <div className="mt-2 h-8 animate-pulse rounded-md bg-muted" />
           ) : workspaces.isError ? (
-            <div className="mt-1 text-[12px] text-destructive">
+            <div className="mt-1 px-1 text-[12px] text-destructive">
               Failed to load workspaces.{' '}
               <button
                 type="button"
@@ -96,28 +97,44 @@ export function WorkspaceSwitcher() {
               </button>
             </div>
           ) : workspaces.data && workspaces.data.length === 0 ? (
-            <p className="mt-1 text-[12px] text-muted-foreground">
+            <p className="mt-1 px-1 text-[12px] text-muted-foreground">
               No workspaces yet in this org.
             </p>
           ) : (
-            <select
-              value={currentWorkspaceId ?? ''}
-              onChange={(e) => {
-                setCurrentWorkspaceId(e.target.value || null);
-                setOpen(false);
-              }}
-              className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-[13px] outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/10"
-            >
-              <option value="" disabled>
-                Select a workspace
-              </option>
+            <ul className="mt-1 flex flex-col">
               {workspaces.data?.map((ws) => (
-                <option key={ws.id} value={ws.id}>
-                  {ws.name}
-                </option>
+                <li key={ws.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(ws.id)}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-accent',
+                      ws.id === wsIdFromUrl && 'bg-accent font-medium',
+                    )}
+                  >
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-violet/15 text-[10px] font-semibold text-brand-violet">
+                      {ws.name.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="truncate">{ws.name}</span>
+                  </button>
+                </li>
               ))}
-            </select>
+            </ul>
           )}
+
+          <div className="mt-1 border-t border-border pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate('/workspaces');
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Plus size={12} strokeWidth={2.25} />
+              See all workspaces
+            </button>
+          </div>
         </div>
       )}
     </div>

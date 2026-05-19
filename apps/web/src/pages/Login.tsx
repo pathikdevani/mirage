@@ -13,7 +13,7 @@ export function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (auth.status === 'authenticated') navigate('/', { replace: true });
+    if (auth.status === 'authenticated') navigate('/workspaces', { replace: true });
   }, [auth.status, navigate]);
 
   return (

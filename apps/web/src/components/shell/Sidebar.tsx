@@ -1,8 +1,14 @@
-import { NavLink } from 'react-router';
+import { NavLink, useParams } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@mirage/ui-kit';
+import { bff } from '../../api/client.js';
 import { NAV } from './nav-config.js';
+import { colorForId, initialsForName } from '../workspace-picker/avatar.js';
 
 export function Sidebar() {
+  const params = useParams<{ wsId: string }>();
+  const wsId = params.wsId ?? null;
+
   return (
     <aside className="sticky top-14 h-[calc(100vh-56px)] w-60 overflow-y-auto border-r border-border bg-[hsl(0_0%_99%)]">
       <nav className="flex flex-col gap-6 px-3 py-5">
@@ -14,10 +20,11 @@ export function Sidebar() {
             <ul className="flex flex-col gap-0.5">
               {section.items.map((item) => {
                 const Icon = item.icon;
+                const to = wsId ? `/workspaces/${wsId}/${item.path}` : `/${item.path}`;
                 return (
                   <li key={item.path}>
                     <NavLink
-                      to={item.path}
+                      to={to}
                       className={({ isActive }) =>
                         cn(
                           'flex h-8 items-center gap-2 rounded-md px-3 text-[13px] transition-colors',
@@ -37,21 +44,48 @@ export function Sidebar() {
           </div>
         ))}
 
-        <ProjectCard />
+        {wsId && <WorkspaceCard wsId={wsId} />}
       </nav>
     </aside>
   );
 }
 
-function ProjectCard() {
+function WorkspaceCard({ wsId }: { wsId: string }) {
+  const workspace = useQuery({
+    queryKey: ['workspace', wsId],
+    queryFn: async () => {
+      const { data, error } = await bff.GET('/workspaces/{id}', {
+        params: { path: { id: wsId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  if (!workspace.data) return null;
+  const ws = workspace.data;
+  const color = colorForId(ws.id);
+
   return (
     <div className="mt-2 rounded-lg border border-border bg-card px-3 py-3">
-      <div className="text-[11px] font-mono text-muted-foreground">$id</div>
-      <div className="mt-0.5 text-[13px] font-medium text-foreground">
-        identity-platform
-      </div>
-      <div className="mt-1 text-[11px] text-muted-foreground">
-        3 schemas · 14 props
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            'flex h-6 w-6 flex-none items-center justify-center rounded-md text-[10px] font-semibold',
+            color.bg,
+            color.fg,
+          )}
+        >
+          {initialsForName(ws.name)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-medium text-foreground">
+            {ws.name}
+          </div>
+          <div className="truncate font-mono text-[10px] text-muted-foreground">
+            {ws.id}
+          </div>
+        </div>
       </div>
     </div>
   );
