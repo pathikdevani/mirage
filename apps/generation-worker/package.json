@@ -1,0 +1,44 @@
+{
+  "name": "@mirage/generation-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.ts",
+  "dependencies": {
+    "@mirage/engine": "workspace:*",
+    "@mirage/sandbox": "workspace:*",
+    "@mirage/types": "workspace:*",
+    "bullmq": "^5.34.5",
+    "ioredis": "^5.4.2",
+    "pino": "^9.5.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  },
+  "nx": {
+    "name": "@mirage/generation-worker",
+    "targets": {
+      "serve": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsx watch --env-file=../../.env src/main.ts",
+          "cwd": "apps/generation-worker"
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsc -p tsconfig.json --noEmit",
+          "cwd": "apps/generation-worker"
+        }
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint src",
+          "cwd": "apps/generation-worker"
+        }
+      }
+    }
+  }
+}

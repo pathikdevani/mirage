@@ -1,0 +1,78 @@
+{
+  "realm": "mirage",
+  "enabled": true,
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "sslRequired": "none",
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "smtpServer": {
+    "host": "mailhog",
+    "port": "1025",
+    "from": "noreply@mirage.local",
+    "fromDisplayName": "Mirage (dev)",
+    "starttls": "false",
+    "auth": "false"
+  },
+  "groups": [
+    {
+      "name": "acme",
+      "path": "/acme",
+      "attributes": {
+        "orgId": ["acme"]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "mirage-web",
+      "name": "Mirage Web SPA",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      }
+    },
+    {
+      "clientId": "mirage-bff",
+      "name": "Mirage BFF (confidential)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "dev-bff-secret-change-me",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {
+        "use.refresh.tokens": "true"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "dev",
+      "email": "dev@mirage.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Dev",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev",
+          "temporary": false
+        }
+      ],
+      "groups": ["/acme"]
+    }
+  ]
+}

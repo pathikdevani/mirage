@@ -1,0 +1,2 @@
+/* All theme tokens + Tailwind import live in @mirage/ui-kit. */
+@import '@mirage/ui-kit/globals.css';

@@ -1,0 +1,44 @@
+{
+  "name": "@mirage/bff",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.ts",
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/websocket": "^11.0.2",
+    "@mirage/auth": "workspace:*",
+    "@mirage/types": "workspace:*",
+    "fastify": "^5.2.1",
+    "ioredis": "^5.4.2"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  },
+  "nx": {
+    "name": "@mirage/bff",
+    "targets": {
+      "serve": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsx watch --env-file=../../.env src/main.ts",
+          "cwd": "apps/bff"
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsc -p tsconfig.json --noEmit",
+          "cwd": "apps/bff"
+        }
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint src",
+          "cwd": "apps/bff"
+        }
+      }
+    }
+  }
+}

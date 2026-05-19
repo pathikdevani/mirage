@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client", "node"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@mirage/types": ["../../packages/types/src/index.ts"],
+      "@mirage/engine": ["../../packages/engine/src/index.ts"],
+      "@mirage/ui-kit": ["../../packages/ui-kit/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}

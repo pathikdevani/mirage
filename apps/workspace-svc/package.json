@@ -1,0 +1,44 @@
+{
+  "name": "@mirage/workspace-svc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.ts",
+  "dependencies": {
+    "@mirage/auth": "workspace:*",
+    "@mirage/engine": "workspace:*",
+    "@mirage/types": "workspace:*",
+    "fastify": "^5.2.1",
+    "mongodb": "^6.12.0",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  },
+  "nx": {
+    "name": "@mirage/workspace-svc",
+    "targets": {
+      "serve": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsx watch --env-file=../../.env src/main.ts",
+          "cwd": "apps/workspace-svc"
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsc -p tsconfig.json --noEmit",
+          "cwd": "apps/workspace-svc"
+        }
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint src",
+          "cwd": "apps/workspace-svc"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,152 @@
+openapi: 3.1.0
+info:
+  title: Mirage API
+  version: 0.0.0
+  description: |
+    The single OpenAPI spec for Mirage. Lives in `@mirage/types` so it can
+    be consumed both by the BFF (for route shape) and the React SPA (for the
+    typed client). Generated TypeScript types land in `openapi.generated.ts`
+    via `pnpm gen:openapi`, which is wired to `postinstall`.
+
+servers:
+  - url: http://localhost:4000
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Liveness probe (unauthenticated)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /workspaces:
+    get:
+      summary: List the current org's Workspaces
+      operationId: listWorkspaces
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workspace'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      summary: Create a Workspace
+      operationId: createWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkspaceBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /workspaces/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get a Workspace by id
+      operationId: getWorkspace
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [ok] }
+        service: { type: string }
+
+    Workspace:
+      type: object
+      required: [id, orgId, name, createdBy, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        orgId: { type: string }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateWorkspaceBody:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        code: { type: string }
+        detail: { type: string }
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Unauthenticated
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }

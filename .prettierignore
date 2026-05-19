@@ -1,0 +1,19 @@
+node_modules
+dist
+build
+.nx
+coverage
+pnpm-lock.yaml
+**/generated/**
+*.generated.*
+
+# Skill manifests (authored elsewhere)
+.agents/
+.claude/
+
+# Top-level authored docs (not source we lint)
+CONTEXT.md
+PRODUCT.md
+TECH_ARCHITECHRE.md
+BOOTSTRAP_PLAN.md
+README.md

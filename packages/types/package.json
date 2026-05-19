@@ -1,0 +1,54 @@
+{
+  "name": "@mirage/types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./openapi": "./src/openapi.generated.ts",
+    "./openapi.yaml": "./openapi.yaml"
+  },
+  "scripts": {
+    "gen": "openapi-typescript openapi.yaml -o src/openapi.generated.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.5.0"
+  },
+  "nx": {
+    "name": "@mirage/types",
+    "targets": {
+      "gen": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "openapi-typescript openapi.yaml -o src/openapi.generated.ts",
+          "cwd": "packages/types"
+        },
+        "outputs": [
+          "{projectRoot}/src/openapi.generated.ts"
+        ]
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsc -p tsconfig.json --noEmit",
+          "cwd": "packages/types"
+        },
+        "dependsOn": [
+          "gen"
+        ]
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint src",
+          "cwd": "packages/types"
+        },
+        "dependsOn": [
+          "gen"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "production": [
+      "default",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)",
+      "!{projectRoot}/tsconfig.spec.json",
+      "!{projectRoot}/.eslintrc.json",
+      "!{projectRoot}/eslint.config.*"
+    ],
+    "sharedGlobals": [
+      "{workspaceRoot}/tsconfig.base.json",
+      "{workspaceRoot}/.nvmrc",
+      "{workspaceRoot}/pnpm-workspace.yaml"
+    ]
+  },
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "inputs": ["production", "^production"],
+      "outputs": ["{projectRoot}/dist"],
+      "dependsOn": ["^build"]
+    },
+    "lint": {
+      "cache": true,
+      "inputs": ["default", "{workspaceRoot}/eslint.config.mjs"]
+    },
+    "typecheck": {
+      "cache": true,
+      "inputs": ["default", "^default", "{workspaceRoot}/tsconfig.base.json"]
+    }
+  },
+  "defaultBase": "main"
+}
