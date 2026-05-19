@@ -22,14 +22,13 @@
     "allowSyntheticDefaultImports": true,
     "declaration": true,
     "sourceMap": true,
-    "baseUrl": ".",
     "paths": {
-      "@mirage/types": ["packages/types/src/index.ts"],
-      "@mirage/engine": ["packages/engine/src/index.ts"],
-      "@mirage/sandbox": ["packages/sandbox/src/index.ts"],
-      "@mirage/connectors": ["packages/connectors/src/index.ts"],
-      "@mirage/auth": ["packages/auth/src/index.ts"],
-      "@mirage/ui-kit": ["packages/ui-kit/src/index.ts"]
+      "@mirage/types": ["./packages/types/src/index.ts"],
+      "@mirage/engine": ["./packages/engine/src/index.ts"],
+      "@mirage/sandbox": ["./packages/sandbox/src/index.ts"],
+      "@mirage/connectors": ["./packages/connectors/src/index.ts"],
+      "@mirage/auth": ["./packages/auth/src/index.ts"],
+      "@mirage/ui-kit": ["./packages/ui-kit/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp", "dist", ".nx"]
