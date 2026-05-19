@@ -17,7 +17,7 @@ User can visally also see the all the relationship and cross referance.
 
 
 
-## Generator
+## Sets
 Think like i want to generete set of data, I will add all the schema i want to have the part of this set. 
 
 ex: Generete people in reem island area from indian nationality, Have pilipili pepople in abu dhabi city area etc. 
