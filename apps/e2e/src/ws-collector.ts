@@ -26,10 +26,14 @@ export async function collectRunEvents(opts: {
 
   return await new Promise<RunEventLike[]>((resolve, reject) => {
     const ws = new WebSocket(url);
-    const timer = setTimeout(() => {
-      ws.close();
-      resolve(events);
-    }, timeoutMs);
+    let settled = false;
+    const settle = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const timer = setTimeout(() => settle(() => { ws.close(); resolve(events); }), timeoutMs);
 
     ws.on('open', () => {
       ws.send(JSON.stringify({ type: 'subscribe', runId }));
@@ -52,15 +56,24 @@ export async function collectRunEvents(opts: {
         event.type === 'run.failed' ||
         event.type === 'run.cancelled'
       ) {
-        clearTimeout(timer);
-        ws.close();
-        resolve(events);
+        settle(() => { ws.close(); resolve(events); });
       }
     });
 
     ws.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err instanceof Error ? err : new Error(String(err)));
+      settle(() => reject(err instanceof Error ? err : new Error(String(err))));
+    });
+
+    // If the server closes the WS before a terminal event arrives, reject
+    // explicitly rather than hanging until the outer timeout. Silent hangs
+    // mask real delivery bugs.
+    ws.on('close', (code, reason) => {
+      settle(() => {
+        const reasonStr = reason ? reason.toString('utf8') : '';
+        reject(new Error(
+          `WS closed without terminal event: code=${code} reason=${reasonStr || '(none)'} events=${events.length}`,
+        ));
+      });
     });
   });
 }

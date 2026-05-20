@@ -25,7 +25,7 @@ subscriber.on('message', (channel: string, payload: string) => {
     try {
       s.send(payload);
     } catch {
-      // dropped client
+      // dropped client; will be cleaned up on its 'close' event
     }
   }
 });
@@ -80,6 +80,52 @@ export function registerWsRoute(app: FastifyInstance): void {
       const q = request.query as { token?: string; org?: string };
       const token = typeof q.token === 'string' ? q.token : undefined;
       const orgId = typeof q.org === 'string' ? q.org : undefined;
+
+      // Buffer incoming messages until auth completes. Without this, any
+      // message the client sends during the `await verify(token)` window —
+      // which includes the typical `subscribe` sent on WS 'open' — is dropped
+      // because Node's EventEmitter doesn't queue events for late listeners.
+      const pending: Array<Buffer | ArrayBuffer | Buffer[]> = [];
+      let authed = false;
+      let authedOrgId: string | null = null;
+
+      const handleClientMessage = async (
+        raw: Buffer | ArrayBuffer | Buffer[],
+      ): Promise<void> => {
+        let parsed: ClientMessage;
+        try {
+          const text = Array.isArray(raw)
+            ? Buffer.concat(raw).toString('utf8')
+            : Buffer.isBuffer(raw)
+              ? raw.toString('utf8')
+              : Buffer.from(raw as ArrayBuffer).toString('utf8');
+          parsed = JSON.parse(text) as ClientMessage;
+        } catch {
+          socket.send(JSON.stringify({ type: 'error', message: 'invalid json' }));
+          return;
+        }
+        if (parsed.type === 'subscribe') {
+          const ch = runChannel(authedOrgId!, parsed.runId);
+          await attach(ch, socket);
+          socket.send(JSON.stringify({ type: 'subscribed', runId: parsed.runId }));
+        } else if (parsed.type === 'unsubscribe') {
+          const ch = runChannel(authedOrgId!, parsed.runId);
+          await detach(ch, socket);
+          socket.send(JSON.stringify({ type: 'unsubscribed', runId: parsed.runId }));
+        }
+      };
+
+      socket.on('message', (raw: Buffer | ArrayBuffer | Buffer[]) => {
+        if (!authed) {
+          pending.push(raw);
+          return;
+        }
+        void handleClientMessage(raw);
+      });
+      socket.on('close', () => {
+        void detachAll(socket);
+      });
+
       if (!token) {
         socket.send(JSON.stringify({ type: 'error', message: 'missing token' }));
         socket.close();
@@ -108,33 +154,12 @@ export function registerWsRoute(app: FastifyInstance): void {
         }),
       );
 
-      socket.on('message', async (raw: Buffer | ArrayBuffer | Buffer[]) => {
-        let parsed: ClientMessage;
-        try {
-          const text = Array.isArray(raw)
-            ? Buffer.concat(raw).toString('utf8')
-            : Buffer.isBuffer(raw)
-              ? raw.toString('utf8')
-              : Buffer.from(raw as ArrayBuffer).toString('utf8');
-          parsed = JSON.parse(text) as ClientMessage;
-        } catch {
-          socket.send(JSON.stringify({ type: 'error', message: 'invalid json' }));
-          return;
-        }
-        if (parsed.type === 'subscribe') {
-          const ch = runChannel(orgId, parsed.runId);
-          await attach(ch, socket);
-          socket.send(JSON.stringify({ type: 'subscribed', runId: parsed.runId }));
-        } else if (parsed.type === 'unsubscribe') {
-          const ch = runChannel(orgId, parsed.runId);
-          await detach(ch, socket);
-          socket.send(JSON.stringify({ type: 'unsubscribed', runId: parsed.runId }));
-        }
-      });
-
-      socket.on('close', () => {
-        void detachAll(socket);
-      });
+      authedOrgId = orgId;
+      authed = true;
+      const buffered = pending.splice(0);
+      for (const raw of buffered) {
+        await handleClientMessage(raw);
+      }
     },
   );
 }
