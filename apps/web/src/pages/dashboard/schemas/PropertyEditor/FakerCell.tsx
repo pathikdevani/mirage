@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Code2, Link2, Search } from 'lucide-react';
@@ -38,6 +39,33 @@ export function FakerCell({
 
   const [filter, setFilter] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    const update = (): void => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) setPos({ left: r.left, top: r.bottom + 4, width: Math.max(r.width, 320) });
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = (e: Event): void => {
+      if (popoverRef.current?.contains(e.target as Node)) return;
+      onToggle();
+    };
+    window.addEventListener('scroll', onScroll, true);
+    return () => window.removeEventListener('scroll', onScroll, true);
+  }, [open, onToggle]);
 
   const customFunctions = useQuery({
     enabled: open && Boolean(wsId),
@@ -105,6 +133,7 @@ export function FakerCell({
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={onToggle}
         className={cn(
@@ -136,10 +165,14 @@ export function FakerCell({
         )}
         <ChevronDown size={11} className="ml-auto flex-none text-muted-foreground" />
       </button>
-      {open && (
+      {open && pos && createPortal(
         <>
           <div className="fixed inset-0 z-30" onClick={onToggle} />
-          <div className="absolute left-0 top-8 z-40 w-[320px] overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
+          <div
+            ref={popoverRef}
+            className="fixed z-40 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
+            style={{ left: pos.left, top: pos.top, width: pos.width }}
+          >
             <div className="border-b border-border bg-card px-2 py-2">
               <div className="relative">
                 <Search
@@ -248,7 +281,8 @@ export function FakerCell({
                 )}
             </div>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   );
