@@ -13,3 +13,6 @@ export * from './resolve-schema.js';
 export * from './apply-strategy.js';
 export * from './extract-set-edges.js';
 export * from './extract-fn-refs.js';
+export * from './rng.js';
+export * from './faker-engine.js';
+export * from './run-set.js';

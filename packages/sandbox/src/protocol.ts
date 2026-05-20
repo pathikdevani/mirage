@@ -8,8 +8,14 @@ export interface SandboxInvokeMessage {
   type: 'invoke';
   /** Caller-chosen id for matching responses to requests. */
   callId: string;
-  /** JavaScript source of the Custom Function — wrapped in `vm.compileFunction` inside the worker. */
-  source: string;
+  /** sha1(source).slice(0, 12) — used as the cache key inside the worker. */
+  sourceHash: string;
+  /**
+   * The function source. Null when the pool believes the worker already has
+   * `sourceHash` cached; the worker responds with a `CacheMiss` error if it
+   * doesn't, prompting the pool to resend with `source` populated.
+   */
+  source: string | null;
   /** Argument object passed to the function. Must be structured-cloneable. */
   args: unknown;
   /** Per-call wall-clock limit (ms). The worker passes this to `vm`'s `timeout` option. */
@@ -27,7 +33,10 @@ export interface SandboxErrorMessage {
   type: 'result';
   callId: string;
   ok: false;
-  /** Class name from the worker (e.g. `TimeoutError`, `TypeError`). */
+  /**
+   * Class name from the worker (e.g. `TimeoutError`, `SyntaxError`, `TypeError`).
+   * The sentinel `'CacheMiss'` indicates the worker needs the source resent.
+   */
   errorName: string;
   errorMessage: string;
   /** Stripped of file paths to avoid leaking worker internals. */

@@ -26,12 +26,7 @@ export function extractFnRefs(schemas: ReadonlyArray<Schema>): FnRef[] {
   return out;
 }
 
-function walk(
-  props: SchemaProp[],
-  basePath: string,
-  schemaKey: string,
-  out: FnRef[],
-): void {
+function walk(props: SchemaProp[], basePath: string, schemaKey: string, out: FnRef[]): void {
   for (const p of props) {
     const path = basePath ? `${basePath}.${p.name}` : p.name;
     if (typeof p.faker === 'string') {
