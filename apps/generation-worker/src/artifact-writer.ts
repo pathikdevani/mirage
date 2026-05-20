@@ -8,12 +8,11 @@ import { runArtifactKey } from './s3.js';
  * Close on success; abort on cancel/failure to avoid leaving an incomplete
  * multipart upload behind.
  *
- * Buffer sizing: PassThrough's `highWaterMark` is bumped above lib-storage's
- * minimum part size (5 MiB enforced by S3) so small artifacts (e.g. a 2k-row
- * run ~= 100 KB) never trigger a backpressure await that would deadlock
- * against lib-storage. lib-storage only flushes when it has a full part OR
- * the body stream ends — for tiny streams that means waiting for close(),
- * and if we're paused awaiting `drain` we never get there.
+ * Drain ordering: `Upload.done()` is what actually attaches lib-storage as a
+ * consumer of the body stream. We kick it off in the constructor so the
+ * stream starts draining as soon as the first part-sized chunk lands — if we
+ * waited until `close()`, large runs would deadlock at the PassThrough
+ * high-water mark with no reader on the other end.
  */
 const PASSTHROUGH_HIGH_WATER_MARK = 16 * 1024 * 1024; // 16 MiB
 
@@ -21,6 +20,7 @@ export class RunArtifactWriter {
   readonly key: string;
   private readonly stream = new PassThrough({ highWaterMark: PASSTHROUGH_HIGH_WATER_MARK });
   private readonly upload: Upload;
+  private readonly uploadDone: Promise<unknown>;
   private finished = false;
 
   constructor(opts: {
@@ -40,18 +40,17 @@ export class RunArtifactWriter {
         ContentType: 'application/x-ndjson',
       },
     });
+    // Start consuming the body stream immediately. The promise is awaited in
+    // close()/abort(); attach a no-op catch so an early reject (e.g. abort)
+    // never surfaces as an unhandled rejection before someone awaits it.
+    this.uploadDone = this.upload.done();
+    this.uploadDone.catch(() => undefined);
   }
 
   async writeRow(row: unknown): Promise<void> {
     if (this.finished) throw new Error('writer is closed');
     const line = JSON.stringify(row) + '\n';
     const ok = this.stream.write(line);
-    // Backpressure only matters once lib-storage starts uploading parts (i.e.
-    // total written > 5 MiB). Below that, lib-storage buffers internally and
-    // never drains the PassThrough until close() — so awaiting drain would
-    // deadlock. With a 16 MiB high-water mark the small-stream case never
-    // hits this branch; large streams still get proper backpressure once
-    // parts are flushing.
     if (!ok) await new Promise<void>((resolve) => this.stream.once('drain', () => resolve()));
   }
 
@@ -59,7 +58,7 @@ export class RunArtifactWriter {
     if (this.finished) return;
     this.finished = true;
     this.stream.end();
-    await this.upload.done();
+    await this.uploadDone;
   }
 
   async abort(): Promise<void> {
@@ -69,6 +68,8 @@ export class RunArtifactWriter {
       await this.upload.abort();
     } finally {
       this.stream.destroy();
+      // Swallow the inevitable rejection of the in-flight upload promise.
+      await this.uploadDone.catch(() => undefined);
     }
   }
 }

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:soak": "MIRAGE_RUN_SOAK=1 vitest run src/run-1m-soak.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1050.0",
@@ -27,6 +28,13 @@
         "executor": "nx:run-commands",
         "options": {
           "command": "vitest run",
+          "cwd": "apps/e2e"
+        }
+      },
+      "test:soak": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "MIRAGE_RUN_SOAK=1 vitest run src/run-1m-soak.test.ts",
           "cwd": "apps/e2e"
         }
       },

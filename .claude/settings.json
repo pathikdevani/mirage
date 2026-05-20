@@ -22,7 +22,11 @@
       "Bash(pnpm -F @mirage/e2e test -- diag-engine-direct)",
       "Bash(pnpm -F @mirage/e2e test -- diag-writer)",
       "Bash(timeout 30 ../../node_modules/.bin/tsx src/diag-writer-script.ts)",
-      "Bash(pnpm -F @mirage/e2e test -- run-pipeline)"
+      "Bash(pnpm -F @mirage/e2e test -- run-pipeline)",
+      "Bash(mongosh \"mongodb://mirage:mirage@localhost:27017/mirage?authSource=admin\" --quiet --eval 'db.runs.find\\({setId: \"set_HCwILnHyI0ZQiDUZ\"}\\).sort\\({startedAt: -1}\\).limit\\(3\\).toArray\\(\\)')",
+      "Bash(ps -o pid,ppid,etime,command -p 32844,27439)",
+      "Bash(pnpm --filter @mirage/e2e exec tsc -p tsconfig.json --noEmit)",
+      "Bash(pnpm --filter @mirage/e2e exec eslint src/run-1m-soak.test.ts src/fixtures.ts)"
     ]
   }
 }

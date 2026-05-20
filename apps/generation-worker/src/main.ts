@@ -98,3 +98,4 @@ main().catch((err) => {
   logger.error({ err }, 'generation-worker failed to start');
   process.exit(1);
 });
+

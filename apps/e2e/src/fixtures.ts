@@ -63,6 +63,59 @@ export async function createPersonSchema(
   return schema;
 }
 
+export interface CreatedCustomFunction {
+  id: string;
+  name: string;
+}
+
+export async function createValueGeneratorFn(
+  bff: BffClient,
+  wsId: string,
+  source: string,
+): Promise<CreatedCustomFunction> {
+  // Names must be JS identifiers per workspace-svc validation: no dashes.
+  const t = tag().replace(/[^a-zA-Z0-9]/g, '');
+  const fn = await bff.post<{ id: string; name: string }>(
+    `/workspaces/${encodeURIComponent(wsId)}/custom-functions`,
+    {
+      name: `fn_${t}`.slice(0, 40),
+      description: '',
+      usage: 'valueGenerator',
+      source,
+    },
+  );
+  return fn;
+}
+
+/**
+ * "person" with one faker field and one custom-function field. Mirrors the
+ * schema shape that triggered the long-running-soak failure: every row makes
+ * a sandbox call, so this exercises the sandbox pool + worker_threads path.
+ */
+export async function createPersonSchemaWithCustomFn(
+  bff: BffClient,
+  wsId: string,
+  fnId: string,
+): Promise<CreatedSchema> {
+  const t = tag();
+  const schema = await bff.post<{ id: string; key: string }>(
+    `/workspaces/${encodeURIComponent(wsId)}/schemas`,
+    {
+      key: `person-cfn-${t}`.slice(0, 40),
+      name: 'person',
+      description: '',
+      color: 'cyan',
+      icon: 'User',
+      tags: [],
+      properties: [
+        { name: 'fname', type: 'string', faker: 'person.fullName', required: false },
+        { name: 'lname', type: 'string', faker: `$fn:${fnId}`, required: false },
+      ],
+    },
+  );
+  return schema;
+}
+
 export interface CreatedSet {
   id: string;
   key: string;
