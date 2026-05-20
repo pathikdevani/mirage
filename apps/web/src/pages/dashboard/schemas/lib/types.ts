@@ -1,5 +1,7 @@
 import type { Api } from '@mirage/types';
 
+export { FAKER_GROUPS, type FakerGroup } from '@mirage/fakerjs';
+
 export type Schema = Api.components['schemas']['Schema'];
 export type SchemaProp = Api.components['schemas']['SchemaProp'];
 export type CreateSchemaBody = Api.components['schemas']['CreateSchemaBody'];
@@ -23,28 +25,6 @@ export const ICON_NAMES = [
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
-
-export const FAKER_GROUPS: ReadonlyArray<{ ns: string; methods: readonly string[] }> = [
-  {
-    ns: 'person',
-    methods: ['firstName', 'lastName', 'fullName', 'sex', 'jobTitle', 'middleName', 'bio'],
-  },
-  {
-    ns: 'internet',
-    methods: ['email', 'url', 'ipv4', 'userAgent', 'mac', 'domainName', 'username'],
-  },
-  { ns: 'string', methods: ['uuid', 'numeric', 'alpha', 'alphanumeric', 'nanoid', 'hexadecimal'] },
-  { ns: 'phone', methods: ['number', 'imei'] },
-  { ns: 'date', methods: ['past', 'future', 'birthdate', 'recent', 'soon', 'between'] },
-  {
-    ns: 'location',
-    methods: ['city', 'country', 'streetAddress', 'zipCode', 'latitude', 'longitude'],
-  },
-  { ns: 'helpers', methods: ['arrayElement', 'slugify', 'replaceSymbols', 'fromRegExp'] },
-  { ns: 'finance', methods: ['accountNumber', 'iban', 'currency', 'amount', 'creditCardNumber'] },
-  { ns: 'datatype', methods: ['boolean', 'json'] },
-  { ns: 'lorem', methods: ['word', 'words', 'sentence', 'paragraph'] },
-];
 
 /** The 9 type/format combinations used in the type selector. */
 export type TypeOption =

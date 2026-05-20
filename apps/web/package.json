@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@mirage/engine": "workspace:*",
+    "@mirage/fakerjs": "workspace:*",
     "@mirage/types": "workspace:*",
     "@mirage/ui-kit": "workspace:*",
     "@monaco-editor/react": "^4.6.0",

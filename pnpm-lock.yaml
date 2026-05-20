@@ -147,6 +147,9 @@ importers:
       '@mirage/engine':
         specifier: workspace:*
         version: link:../../packages/engine
+      '@mirage/fakerjs':
+        specifier: workspace:*
+        version: link:../../packages/fakerjs
       '@mirage/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -276,6 +279,12 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@24.12.4)(lightningcss@1.32.0)
+
+  packages/fakerjs:
+    dependencies:
+      '@faker-js/faker':
+        specifier: ^9.3.0
+        version: 9.9.0
 
   packages/sandbox:
     dependencies:
