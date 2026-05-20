@@ -13,6 +13,13 @@
     "@mirage/sandbox": "workspace:*",
     "@mirage/types": "workspace:*"
   },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "nx": {
     "name": "@mirage/engine",
     "targets": {
@@ -27,6 +34,13 @@
         "executor": "nx:run-commands",
         "options": {
           "command": "eslint src",
+          "cwd": "packages/engine"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run",
           "cwd": "packages/engine"
         }
       }

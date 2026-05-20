@@ -35,4 +35,8 @@ export const env = {
     callTimeoutMs: Number.parseInt(optional('SANDBOX_CALL_TIMEOUT_MS', '5000'), 10),
     memoryCapMb: Number.parseInt(optional('SANDBOX_MEMORY_CAP_MB', '64'), 10),
   },
+  generation: {
+    /** Rows yielded per RowBatch by the streaming engine. Drives progress cadence. */
+    batchSize: Number.parseInt(optional('GENERATION_BATCH_SIZE', '500'), 10),
+  },
 } as const;

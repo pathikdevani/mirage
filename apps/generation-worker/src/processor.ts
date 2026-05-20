@@ -1,7 +1,7 @@
 import type { Job } from 'bullmq';
 import type Redis from 'ioredis';
 import type { Logger } from 'pino';
-import { runSet } from '@mirage/engine';
+import { planRunSet, runSetStream, CancelledError } from '@mirage/engine';
 import type {
   RunCancelledEvent,
   RunCompletedEvent,
@@ -22,20 +22,19 @@ import { env } from './env.js';
 
 const nowIso = (): string => new Date().toISOString();
 
-class CancelledError extends Error {
-  override readonly name = 'CancelledError';
-}
+const CANCEL_POLL_MS = 250;
 
 /**
- * BullMQ job handler. Loads the Set/Schemas/Functions, runs the engine,
- * streams NDJSON to S3, and publishes `run.*` events to Redis pub/sub.
+ * BullMQ job handler. Loads the Set/Schemas/Functions, drives the streaming
+ * engine, writes NDJSON to S3 in batches, and publishes `run.*` events to
+ * Redis pub/sub.
  *
- * Cancellation is cooperative: the worker polls `cancelFlagKey(runId)` between
- * schemas and on entry. On cancel/failure the multipart upload is aborted so
- * no partial artifact is left in object storage.
+ * Cancellation: a 250 ms-tick poller checks `cancelFlagKey(runId)` and aborts
+ * the engine via AbortSignal on cancel. The engine throws CancelledError at
+ * the next batch boundary; the multipart upload is aborted so no partial
+ * artifact is left in object storage.
  *
- * The processor does NOT rethrow — BullMQ retry isn't in v1 scope (failed
- * runs require a manual re-click per the spec's Out of scope list).
+ * The processor does NOT rethrow — BullMQ retry isn't in v1 scope.
  */
 export function makeRunProcessor(args: {
   publisher: Redis;
@@ -60,14 +59,31 @@ export function makeRunProcessor(args: {
     log.info('run started');
 
     let writer: RunArtifactWriter | null = null;
+    const cancelController = new AbortController();
+    const cancelTimer = setInterval(() => {
+      void isCancelled(cancelRedis, runId).then((c) => {
+        if (c) cancelController.abort();
+      });
+    }, CANCEL_POLL_MS);
 
     try {
       if (await isCancelled(cancelRedis, runId)) throw new CancelledError();
 
       const { set, schemas, registry } = await loadRunInputs({ db, workspaceId, setId });
       const sandbox = getSandbox();
+      const plan = planRunSet({ set, schemas });
 
-      const result = await runSet({ set, schemas, customFunctions: registry, sandbox });
+      await publish(
+        {
+          type: 'run.progress',
+          runId,
+          schemaId: (plan.order[0] ?? '') as SchemaId,
+          produced: 0,
+          total: plan.totalRows,
+          at: nowIso(),
+        } satisfies RunProgressEvent,
+        orgId,
+      );
 
       writer = new RunArtifactWriter({
         orgId,
@@ -77,23 +93,26 @@ export function makeRunProcessor(args: {
         bucket: env.s3.bucket,
       });
 
-      const totalRows = set.schemas.reduce((acc, inc) => acc + inc.count, 0);
-      let produced = 0;
       const rowCounts: Record<string, number> = {};
 
-      for (const [schemaKey, rows] of result.rowsByKey.entries()) {
-        if (await isCancelled(cancelRedis, runId)) throw new CancelledError();
-        for (const row of rows) {
-          await writer.writeRow({ __schemaKey: schemaKey, ...(row as object) });
+      for await (const batch of runSetStream({
+        set,
+        schemas,
+        customFunctions: registry,
+        sandbox,
+        batchSize: env.generation.batchSize,
+        signal: cancelController.signal,
+      })) {
+        for (const row of batch.rows) {
+          await writer.writeRow({ __schemaKey: batch.schemaKey, ...(row as object) });
         }
-        produced += rows.length;
-        rowCounts[schemaKey] = rows.length;
+        rowCounts[batch.schemaKey] = batch.schemaProduced;
         const progress: RunProgressEvent = {
           type: 'run.progress',
           runId,
-          schemaId: schemaKey as SchemaId,
-          produced,
-          total: totalRows,
+          schemaId: batch.schemaKey as SchemaId,
+          produced: batch.totalProduced,
+          total: batch.totalRows,
           at: nowIso(),
         };
         await publish(progress, orgId);
@@ -145,6 +164,8 @@ export function makeRunProcessor(args: {
       const failed: RunFailedEvent = { type: 'run.failed', runId, message, at: endedAt };
       await publish(failed, orgId);
       log.warn({ err }, 'run failed');
+    } finally {
+      clearInterval(cancelTimer);
     }
   };
 }

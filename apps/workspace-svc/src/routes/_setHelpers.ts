@@ -1,5 +1,5 @@
 import type { Api } from '@mirage/types';
-import { extractSetEdges, type SetEdge } from '@mirage/engine';
+import { extractSetEdges, MAX_ROWS_PER_SCHEMA, type SetEdge } from '@mirage/engine';
 
 type SetDoc = Api.components['schemas']['Set'];
 type CreateSetBody = Api.components['schemas']['CreateSetBody'];
@@ -81,10 +81,10 @@ export function normalizeAndValidateSetBody(
     if (typeof inc?.schemaKey !== 'string' || !KEY_RE.test(inc.schemaKey)) {
       return err('schema_inclusion_invalid', `Invalid schemaKey on inclusion: ${inc?.schemaKey}`);
     }
-    if (!Number.isInteger(inc.count) || inc.count < 0 || inc.count > 10_000_000) {
+    if (!Number.isInteger(inc.count) || inc.count < 0 || inc.count > MAX_ROWS_PER_SCHEMA) {
       return err(
         'schema_inclusion_invalid',
-        `count for ${inc.schemaKey} must be an integer in [0, 10_000_000]`,
+        `count for ${inc.schemaKey} must be an integer in [0, ${MAX_ROWS_PER_SCHEMA.toLocaleString('en-US')}]`,
       );
     }
   }
