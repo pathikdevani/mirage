@@ -24,6 +24,8 @@ export interface SetEdge {
   /** Dotted path; `[]` separates array property names. Example: `addresses[].cityRef`. */
   fromFieldPath: string;
   toSchemaKey: string;
+  /** Dotted path of the field on the target schema whose value is projected. Undefined ⇒ project `__id`. */
+  toFieldPath?: string;
   cardinality: 'one' | 'many';
 }
 
@@ -58,6 +60,7 @@ function walk(
           fromSchemaKey,
           fromFieldPath: path,
           toSchemaKey: m[1]!,
+          ...(m[2] ? { toFieldPath: m[2] } : {}),
           cardinality: insideArray ? 'many' : 'one',
         });
       }

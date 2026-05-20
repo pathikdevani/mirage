@@ -73,7 +73,7 @@ export async function runSet(params: RunSetParams): Promise<RunSetResult> {
     const cardinality = edge.cardinality;
     const many = cardinality === 'many' ? { min: 1, max: 3 } : undefined;
 
-    const ids = await applyStrategy({
+    const values = await applyStrategy({
       strategy,
       sourceRows,
       targetRows,
@@ -82,13 +82,14 @@ export async function runSet(params: RunSetParams): Promise<RunSetResult> {
       salt: set.salt,
       fromSchemaKey: edge.fromSchemaKey,
       fromFieldPath: edge.fromFieldPath,
+      ...(edge.toFieldPath ? { toFieldPath: edge.toFieldPath } : {}),
       customFunctions,
       sandbox,
     });
 
     for (let i = 0; i < sourceRows.length; i++) {
       const row = sourceRows[i]!;
-      substituteRef(row as Record<string, unknown>, edge.fromFieldPath, ids[i]!);
+      substituteRef(row as Record<string, unknown>, edge.fromFieldPath, values[i]!);
     }
   }
 
@@ -173,7 +174,7 @@ function topoSort(schemaKeys: ReadonlySet<string>, edges: ReadonlyArray<SetEdge>
 function substituteRef(
   row: Record<string, unknown>,
   fieldPath: string,
-  replacement: string | string[],
+  replacement: unknown,
 ): void {
   const parts = parsePath(fieldPath);
   walkAndReplace(row, parts, 0, replacement);
@@ -203,7 +204,7 @@ function walkAndReplace(
   node: unknown,
   segs: PathSegment[],
   idx: number,
-  replacement: string | string[],
+  replacement: unknown,
 ): void {
   if (idx >= segs.length) return;
   const seg = segs[idx]!;

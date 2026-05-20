@@ -16,11 +16,15 @@ export interface ApplyStrategyParams {
   salt: string;
   fromSchemaKey: string;
   fromFieldPath: string;
+  /** Dotted path of the field on the target row to project. Defaults to `__id`. */
+  toFieldPath?: string;
   customFunctions: CustomFunctionRegistry;
   sandbox: SandboxPool;
 }
 
-export async function applyStrategy(params: ApplyStrategyParams): Promise<string[] | string[][]> {
+export async function applyStrategy(
+  params: ApplyStrategyParams,
+): Promise<unknown[] | unknown[][]> {
   const {
     strategy,
     sourceRows,
@@ -30,10 +34,24 @@ export async function applyStrategy(params: ApplyStrategyParams): Promise<string
     salt,
     fromSchemaKey,
     fromFieldPath,
+    toFieldPath,
     customFunctions,
     sandbox,
   } = params;
   const rng = mulberry32(hashSeed(salt, fromSchemaKey, fromFieldPath));
+  const byId = new Map(targetRows.map((r) => [r.__id, r]));
+  const project = (id: string): unknown => {
+    if (!toFieldPath) return id;
+    const row = byId.get(id);
+    if (!row) return id;
+    return getByPath(row, toFieldPath);
+  };
+  const projectIds = (ids: string[] | string[][]): unknown[] | unknown[][] => {
+    if (!toFieldPath) return ids;
+    return cardinality === 'one'
+      ? (ids as string[]).map(project)
+      : (ids as string[][]).map((arr) => arr.map(project));
+  };
 
   if (strategy.type === '1:1') {
     if (cardinality !== 'one') {
@@ -51,7 +69,7 @@ export async function applyStrategy(params: ApplyStrategyParams): Promise<string
         target: targetRows.length,
       });
     }
-    return sourceRows.map((_, i) => targetRows[i]!.__id);
+    return projectIds(sourceRows.map((_, i) => targetRows[i]!.__id));
   }
 
   if (strategy.type === 'evenSplit') {
@@ -59,22 +77,24 @@ export async function applyStrategy(params: ApplyStrategyParams): Promise<string
       throw new EngineError('strategy_no_targets', { fromSchemaKey, fromFieldPath });
     }
     if (cardinality === 'one') {
-      return sourceRows.map((_, i) => targetRows[i % targetRows.length]!.__id);
+      return projectIds(sourceRows.map((_, i) => targetRows[i % targetRows.length]!.__id));
     }
     const range = many ?? { min: 1, max: 1 };
-    return sourceRows.map((_, i) => {
-      const k = clampInt(
-        Math.round(targetRows.length / Math.max(1, sourceRows.length)),
-        range.min,
-        range.max,
-      );
-      const out: string[] = [];
-      for (let j = 0; j < k; j++) {
-        const idx = (i * k + j) % targetRows.length;
-        out.push(targetRows[idx]!.__id);
-      }
-      return out;
-    });
+    return projectIds(
+      sourceRows.map((_, i) => {
+        const k = clampInt(
+          Math.round(targetRows.length / Math.max(1, sourceRows.length)),
+          range.min,
+          range.max,
+        );
+        const out: string[] = [];
+        for (let j = 0; j < k; j++) {
+          const idx = (i * k + j) % targetRows.length;
+          out.push(targetRows[idx]!.__id);
+        }
+        return out;
+      }),
+    );
   }
 
   if (strategy.type === 'random') {
@@ -82,39 +102,43 @@ export async function applyStrategy(params: ApplyStrategyParams): Promise<string
       throw new EngineError('strategy_no_targets', { fromSchemaKey, fromFieldPath });
     }
     if (cardinality === 'one') {
-      return sourceRows.map(() => {
-        const idx = Math.floor(rng() * targetRows.length);
-        return targetRows[idx]!.__id;
-      });
+      return projectIds(
+        sourceRows.map(() => {
+          const idx = Math.floor(rng() * targetRows.length);
+          return targetRows[idx]!.__id;
+        }),
+      );
     }
     const range = many ?? { min: 1, max: 1 };
     const allowDuplicates = (strategy as { allowDuplicates?: boolean }).allowDuplicates !== false;
-    return sourceRows.map(() => {
-      const k = clampInt(
-        range.min + Math.floor(rng() * (range.max - range.min + 1)),
-        0,
-        targetRows.length,
-      );
-      if (k === 0) return [];
-      if (allowDuplicates) {
-        const out: string[] = [];
-        for (let j = 0; j < k; j++) {
-          out.push(targetRows[Math.floor(rng() * targetRows.length)]!.__id);
+    return projectIds(
+      sourceRows.map(() => {
+        const k = clampInt(
+          range.min + Math.floor(rng() * (range.max - range.min + 1)),
+          0,
+          targetRows.length,
+        );
+        if (k === 0) return [];
+        if (allowDuplicates) {
+          const out: string[] = [];
+          for (let j = 0; j < k; j++) {
+            out.push(targetRows[Math.floor(rng() * targetRows.length)]!.__id);
+          }
+          return out;
         }
-        return out;
-      }
-      const pool: string[] = targetRows.map((r) => r.__id);
-      const picks: string[] = [];
-      const limit = Math.min(k, pool.length);
-      for (let j = 0; j < limit; j++) {
-        const swapIdx = j + Math.floor(rng() * (pool.length - j));
-        const tmp = pool[j]!;
-        pool[j] = pool[swapIdx]!;
-        pool[swapIdx] = tmp;
-        picks.push(pool[j]!);
-      }
-      return picks;
-    });
+        const pool: string[] = targetRows.map((r) => r.__id);
+        const picks: string[] = [];
+        const limit = Math.min(k, pool.length);
+        for (let j = 0; j < limit; j++) {
+          const swapIdx = j + Math.floor(rng() * (pool.length - j));
+          const tmp = pool[j]!;
+          pool[j] = pool[swapIdx]!;
+          pool[swapIdx] = tmp;
+          picks.push(pool[j]!);
+        }
+        return picks;
+      }),
+    );
   }
 
   if (strategy.type === 'custom') {
@@ -150,7 +174,7 @@ export async function applyStrategy(params: ApplyStrategyParams): Promise<string
         cardinality,
       });
     }
-    return result as string[] | string[][];
+    return projectIds(result as string[] | string[][]);
   }
 
   throw new EngineError('strategy_unknown', { fromSchemaKey, fromFieldPath, strategy });
@@ -158,6 +182,15 @@ export async function applyStrategy(params: ApplyStrategyParams): Promise<string
 
 function clampInt(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function getByPath(row: Record<string, unknown>, path: string): unknown {
+  let cur: unknown = row;
+  for (const part of path.split('.')) {
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return cur;
 }
 
 function validateStrategyResult(

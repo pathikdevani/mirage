@@ -126,8 +126,12 @@ async function run() {
   );
   assert('mobile.personId substituted (not placeholder)', !isRefPlaceholder(mobiles1[0]!.personId));
   assert(
-    'mobile.personId is a known person id',
-    persons1.map((p) => p.__id).includes(mobiles1[0]!.personId as string),
+    'mobile.personId equals a person.id value (projected user field, not __id)',
+    persons1.map((p) => p.id).includes(mobiles1[0]!.personId),
+  );
+  assert(
+    'mobile.personId is NOT the engine __id',
+    !persons1.map((p) => p.__id).includes(mobiles1[0]!.personId as string),
   );
 
   assert('persons match across runs', JSON.stringify(persons1) === JSON.stringify(persons2));
