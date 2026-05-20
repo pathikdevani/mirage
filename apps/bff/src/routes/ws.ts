@@ -1,39 +1,140 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { WebSocket } from '@fastify/websocket';
+import IORedis from 'ioredis';
+import { createKeycloakVerifier } from '@mirage/auth';
+import { env } from '../env.js';
 
-/**
- * Single WebSocket endpoint per the architecture (§3.2). Today the client
- * connects, the server echoes a `hello`, and we keep the connection open.
- * Subscription wiring to Redis pub/sub channels (`org:{orgId}:run:{runId}`)
- * lands once the worker (T11) starts publishing events.
- */
-export function registerWsRoute(app: FastifyInstance): void {
-  app.get('/ws', { websocket: true }, (socket: WebSocket, request) => {
-    const auth = request.auth;
-    if (!auth) {
-      socket.send(JSON.stringify({ type: 'error', message: 'unauthenticated' }));
-      socket.close();
-      return;
+interface SubscribeMessage {
+  type: 'subscribe';
+  runId: string;
+}
+interface UnsubscribeMessage {
+  type: 'unsubscribe';
+  runId: string;
+}
+type ClientMessage = SubscribeMessage | UnsubscribeMessage;
+
+const subscriber = new IORedis(env.redisUrl);
+const channelToSockets = new Map<string, Set<WebSocket>>();
+const socketChannels = new WeakMap<WebSocket, Set<string>>();
+
+subscriber.on('message', (channel: string, payload: string) => {
+  const sockets = channelToSockets.get(channel);
+  if (!sockets) return;
+  for (const s of sockets) {
+    try {
+      s.send(payload);
+    } catch {
+      // dropped client
     }
+  }
+});
 
-    socket.send(
-      JSON.stringify({
-        type: 'hello',
-        orgId: auth.orgId,
-        userId: auth.userId,
-        at: new Date().toISOString(),
-      }),
-    );
+const runChannel = (orgId: string, runId: string): string => `org:${orgId}:run:${runId}`;
 
-    socket.on('message', (raw: Buffer | ArrayBuffer | Buffer[]) => {
-      // Echo channel for now; will be replaced by pub/sub fan-out.
+async function attach(channel: string, socket: WebSocket): Promise<void> {
+  let set = channelToSockets.get(channel);
+  if (!set) {
+    set = new Set();
+    channelToSockets.set(channel, set);
+    await subscriber.subscribe(channel);
+  }
+  set.add(socket);
+  let chans = socketChannels.get(socket);
+  if (!chans) {
+    chans = new Set();
+    socketChannels.set(socket, chans);
+  }
+  chans.add(channel);
+}
+
+async function detach(channel: string, socket: WebSocket): Promise<void> {
+  const set = channelToSockets.get(channel);
+  if (!set) return;
+  set.delete(socket);
+  socketChannels.get(socket)?.delete(channel);
+  if (set.size === 0) {
+    channelToSockets.delete(channel);
+    await subscriber.unsubscribe(channel);
+  }
+}
+
+async function detachAll(socket: WebSocket): Promise<void> {
+  const chans = socketChannels.get(socket);
+  if (!chans) return;
+  for (const c of [...chans]) {
+    await detach(c, socket);
+  }
+}
+
+export function registerWsRoute(app: FastifyInstance): void {
+  const verify = createKeycloakVerifier({
+    issuer: env.keycloak.issuer,
+    jwksUri: env.keycloak.jwksUri,
+  });
+
+  app.get(
+    '/ws',
+    { websocket: true, config: { public: true } },
+    async (socket: WebSocket, request: FastifyRequest) => {
+      const q = request.query as { token?: string; org?: string };
+      const token = typeof q.token === 'string' ? q.token : undefined;
+      const orgId = typeof q.org === 'string' ? q.org : undefined;
+      if (!token) {
+        socket.send(JSON.stringify({ type: 'error', message: 'missing token' }));
+        socket.close();
+        return;
+      }
+      if (!orgId) {
+        socket.send(JSON.stringify({ type: 'error', message: 'missing org' }));
+        socket.close();
+        return;
+      }
+      let claims: { sub: string };
+      try {
+        claims = (await verify(token)) as { sub: string };
+      } catch {
+        socket.send(JSON.stringify({ type: 'error', message: 'invalid token' }));
+        socket.close();
+        return;
+      }
+
       socket.send(
         JSON.stringify({
-          type: 'echo',
-          received: raw.toString(),
+          type: 'hello',
+          orgId,
+          userId: claims.sub,
           at: new Date().toISOString(),
         }),
       );
-    });
-  });
+
+      socket.on('message', async (raw: Buffer | ArrayBuffer | Buffer[]) => {
+        let parsed: ClientMessage;
+        try {
+          const text = Array.isArray(raw)
+            ? Buffer.concat(raw).toString('utf8')
+            : Buffer.isBuffer(raw)
+              ? raw.toString('utf8')
+              : Buffer.from(raw as ArrayBuffer).toString('utf8');
+          parsed = JSON.parse(text) as ClientMessage;
+        } catch {
+          socket.send(JSON.stringify({ type: 'error', message: 'invalid json' }));
+          return;
+        }
+        if (parsed.type === 'subscribe') {
+          const ch = runChannel(orgId, parsed.runId);
+          await attach(ch, socket);
+          socket.send(JSON.stringify({ type: 'subscribed', runId: parsed.runId }));
+        } else if (parsed.type === 'unsubscribe') {
+          const ch = runChannel(orgId, parsed.runId);
+          await detach(ch, socket);
+          socket.send(JSON.stringify({ type: 'unsubscribed', runId: parsed.runId }));
+        }
+      });
+
+      socket.on('close', () => {
+        void detachAll(socket);
+      });
+    },
+  );
 }

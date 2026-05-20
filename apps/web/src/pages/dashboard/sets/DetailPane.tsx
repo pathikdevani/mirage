@@ -5,7 +5,6 @@ import {
   Eye,
   Link2,
   MoreHorizontal,
-  Play,
   Shuffle,
   Sliders,
   Trash2,
@@ -21,6 +20,7 @@ import { useSetBuffer } from './useSetBuffer.js';
 import { ConfigTab } from './ConfigTab.js';
 import { StrategiesTab } from './StrategiesTab.js';
 import { PreviewTab } from './PreviewTab.js';
+import { RunControl } from './RunControl.js';
 
 type Tab = 'config' | 'strategies' | 'preview';
 
@@ -147,14 +147,7 @@ export function DetailPane({ wsId, set, onDirtyChange, onDeleted }: DetailPanePr
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled
-            title="Generation pipeline coming soon"
-            className="inline-flex h-9 cursor-not-allowed items-center gap-1.5 rounded-md bg-primary/40 px-3 text-[13px] font-medium text-primary-foreground/80"
-          >
-            <Play size={14} strokeWidth={2.5} /> Run set
-          </button>
+          <RunControl wsId={wsId} setId={set.id} onCompleted={() => setTab('preview')} />
           <div className="relative">
             <button
               type="button"
@@ -236,7 +229,7 @@ export function DetailPane({ wsId, set, onDirtyChange, onDeleted }: DetailPanePr
             onClearError={() => setStrategiesError(null)}
           />
         )}
-        {tab === 'preview' && <PreviewTab />}
+        {tab === 'preview' && <PreviewTab wsId={wsId} set={set} />}
       </div>
 
       {buffer.isDirty && (

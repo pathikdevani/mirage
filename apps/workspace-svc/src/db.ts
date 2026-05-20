@@ -5,6 +5,7 @@ import { env } from './env.js';
 export type SchemaDoc = Api.components['schemas']['Schema'];
 export type SetDoc = Api.components['schemas']['Set'];
 export type CustomFunctionDoc = Api.components['schemas']['CustomFunction'];
+export type RunDoc = Api.components['schemas']['Run'];
 
 /**
  * Mongo wrapper. Single client, two collections we care about today
@@ -23,6 +24,7 @@ export interface MirageDb {
   schemas: Collection<SchemaDoc>;
   sets: Collection<SetDoc>;
   customFunctions: Collection<CustomFunctionDoc>;
+  runs: Collection<RunDoc>;
 }
 
 export async function connectDb(): Promise<MirageDb> {
@@ -35,6 +37,7 @@ export async function connectDb(): Promise<MirageDb> {
   const schemas = db.collection<SchemaDoc>('schemas');
   const sets = db.collection<SetDoc>('sets');
   const customFunctions = db.collection<CustomFunctionDoc>('custom_functions');
+  const runs = db.collection<RunDoc>('runs');
 
   await Promise.all([
     workspaces.createIndex({ orgId: 1, id: 1 }, { unique: true }),
@@ -50,9 +53,13 @@ export async function connectDb(): Promise<MirageDb> {
     customFunctions.createIndex({ workspaceId: 1, name: 1 }, { unique: true }),
     customFunctions.createIndex({ workspaceId: 1, updatedAt: -1 }),
     customFunctions.createIndex({ orgId: 1, workspaceId: 1 }),
+    runs.createIndex({ id: 1 }, { unique: true }),
+    runs.createIndex({ orgId: 1, workspaceId: 1, createdAt: -1 }),
+    runs.createIndex({ workspaceId: 1, setId: 1, createdAt: -1 }),
+    runs.createIndex({ workspaceId: 1, status: 1, createdAt: -1 }),
   ]);
 
-  return { client, db, workspaces, memberships, schemas, sets, customFunctions };
+  return { client, db, workspaces, memberships, schemas, sets, customFunctions, runs };
 }
 
 /**
