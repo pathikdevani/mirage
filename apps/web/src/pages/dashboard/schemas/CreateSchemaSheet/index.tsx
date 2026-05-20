@@ -10,6 +10,7 @@ import type {
 } from '../lib/types.js';
 import { KEY_RE } from '../lib/types.js';
 import { validateTree, type ValidationIssue } from '../lib/validateTree.js';
+import { makeServerErrorHandler, type ServerError } from '../lib/mapServerError.js';
 import { SheetShell } from './SheetShell.js';
 import { Step1Details, deriveKey, type AvailabilityState } from './Step1Details.js';
 import { Step2Builder } from './Step2Builder.js';
@@ -21,12 +22,6 @@ interface CreateSchemaSheetProps {
   workspaceSchemas: Schema[];
   onClose: () => void;
   onCreated: (schema: Schema) => void;
-}
-
-interface ServerError {
-  error?: string;
-  code?: string;
-  detail?: unknown;
 }
 
 export function CreateSchemaSheet({
@@ -111,60 +106,21 @@ export function CreateSchemaSheet({
     },
   });
 
-  const mapServerError = (err: ServerError): void => {
-    const code = err?.code;
-    setGenericError(null);
-    if (code === 'name_required') {
-      setNameError(err.error ?? 'Name is required');
-      setStep(1);
-      return;
-    }
-    if (code === 'key_invalid') {
-      setKeyError(err.error ?? 'Key is invalid');
-      setStep(1);
-      return;
-    }
-    if (code === 'key_taken') {
-      setAvailability('taken');
-      setStep(1);
-      return;
-    }
-    if (code === 'properties_empty') {
-      setShowEmptyError(true);
-      setStep(2);
-      return;
-    }
-    if (code === 'property_name_invalid') {
-      const path = detailString(err.detail, 'name');
-      if (path) setRowErrors(new Map([[path, { kind: 'name_invalid', path }]]));
-      setStep(2);
-      return;
-    }
-    if (code === 'property_name_duplicate') {
-      const sibling = detailString(err.detail, 'name') ?? '';
-      if (sibling) setRowErrors(new Map([[sibling, { kind: 'name_duplicate', path: sibling, sibling }]]));
-      setStep(2);
-      return;
-    }
-    if (code === 'ref_target_missing') {
-      const path = detailString(err.detail, 'path');
-      const targetKey = detailString(err.detail, 'targetKey') ?? '';
-      if (path) setRowErrors(new Map([[path, { kind: 'ref_target_missing', path, targetKey }]]));
-      setStep(2);
-      return;
-    }
-    if (code === 'cycle_detected') {
-      const cycle = (err.detail as { cycle?: string[] } | undefined)?.cycle;
-      setCycleBanner(
-        cycle?.length
-          ? `Cycle detected: ${cycle.join(' → ')}`
-          : 'A reference cycle was detected.',
-      );
-      setStep(2);
-      return;
-    }
-    setGenericError(err.error ?? 'Something went wrong creating the schema.');
-  };
+  const mapServerError = useMemo(
+    () =>
+      makeServerErrorHandler({
+        setNameError: (m) => setNameError(m ?? undefined),
+        // Create surfaces key_invalid; key_taken handled via onKeyTaken.
+        setKeyError: (m) => setKeyError(m ?? undefined),
+        setRowErrors: (m) => setRowErrors(m),
+        setCycleBanner: (s) => setCycleBanner(s),
+        setShowEmptyError: (b) => setShowEmptyError(b),
+        setStep: (s) => setStep(s),
+        setGenericBanner: (s) => setGenericError(s),
+        onKeyTaken: () => setAvailability('taken'),
+      }),
+    [],
+  );
 
   // Step 1 validation
   const step1CanContinue =
@@ -298,10 +254,3 @@ export function CreateSchemaSheet({
   );
 }
 
-function detailString(detail: unknown, key: string): string | undefined {
-  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
-    const v = (detail as Record<string, unknown>)[key];
-    if (typeof v === 'string') return v;
-  }
-  return undefined;
-}

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { ClientSession } from 'mongodb';
 import { nanoid } from 'nanoid';
 import { asId, type Api, type WorkspaceId } from '@mirage/types';
 import type { MirageDb, SchemaDoc } from '../db.js';
@@ -6,6 +7,7 @@ import type { MirageDb, SchemaDoc } from '../db.js';
 type Schema = Api.components['schemas']['Schema'];
 type SchemaProp = Api.components['schemas']['SchemaProp'];
 type CreateSchemaBody = Api.components['schemas']['CreateSchemaBody'];
+type UpdateSchemaBody = Api.components['schemas']['UpdateSchemaBody'];
 
 interface ListParams {
   wsId: string;
@@ -85,6 +87,67 @@ function collectRefs(properties: SchemaProp[]): { targetKey: string; targetField
   return out;
 }
 
+/** Rewrite any `$ref:<oldKey>(.field…)?` in a property tree to `$ref:<newKey>(.field…)?`.
+ *  Returns true if the tree was mutated in place. */
+function rewriteRefsInTree(props: SchemaProp[], oldKey: string, newKey: string): boolean {
+  const prefix = `$ref:${oldKey}`;
+  let changed = false;
+  const walk = (arr: SchemaProp[]): void => {
+    for (const p of arr) {
+      if (typeof p.faker === 'string' && p.faker.startsWith(prefix)) {
+        const remainder = p.faker.slice(prefix.length);
+        if (remainder === '' || remainder.startsWith('.')) {
+          p.faker = `$ref:${newKey}${remainder}`;
+          changed = true;
+        }
+      }
+      if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields);
+      else if (p.type === 'array' && p.items) walk([p.items]);
+    }
+  };
+  walk(props);
+  return changed;
+}
+
+function detectCycleInGraph(graph: { key: string; refs: string[] }[]): string[] | null {
+  const adj = new Map<string, Set<string>>();
+  for (const s of graph) adj.set(s.key, new Set(s.refs));
+  const WHITE = 0,
+    GRAY = 1,
+    BLACK = 2;
+  const color = new Map<string, number>();
+  const stack: string[] = [];
+  let result: string[] | null = null;
+  const dfs = (node: string): boolean => {
+    color.set(node, GRAY);
+    stack.push(node);
+    const out = adj.get(node);
+    if (out) {
+      for (const next of out) {
+        if (!adj.has(next)) continue;
+        const c = color.get(next) ?? WHITE;
+        if (c === GRAY) {
+          const i = stack.indexOf(next);
+          result = i >= 0 ? [...stack.slice(i), next] : [next];
+          return true;
+        }
+        if (c === WHITE && dfs(next)) return true;
+      }
+    }
+    stack.pop();
+    color.set(node, BLACK);
+    return false;
+  };
+  for (const k of adj.keys()) {
+    if ((color.get(k) ?? WHITE) === WHITE && dfs(k)) return result;
+  }
+  return null;
+}
+
+function isReplicaSetUnsupported(e: unknown): boolean {
+  return e instanceof Error && /replica set|Transaction numbers/i.test(e.message);
+}
+
 /** Topological cycle check across schemas (cross-schema only). */
 function findCycle(
   newKey: string,
@@ -127,6 +190,43 @@ function findCycle(
     }
   }
   return null;
+}
+
+interface NormalizedBody {
+  name: string;
+  key: string;
+  description: string;
+  color: 'violet' | 'cyan' | 'emerald' | 'amber' | 'rose' | 'slate';
+  icon: string;
+  tags: string[];
+  properties: SchemaProp[];
+}
+
+function normalizeAndValidateBody(body: CreateSchemaBody | UpdateSchemaBody): NormalizedBody | ValidationError {
+  const trimmedName = typeof body?.name === 'string' ? body.name.trim() : '';
+  if (!trimmedName) return err('name_required', '`name` is required');
+  if (typeof body?.key !== 'string' || !KEY_RE.test(body.key)) {
+    return err('key_invalid', '`key` must match ^[a-z][a-z0-9-]{0,39}$');
+  }
+  if (!Array.isArray(body.tags)) return err('key_invalid', '`tags` must be an array');
+  if (typeof body.icon !== 'string' || !body.icon) {
+    return err('key_invalid', '`icon` is required');
+  }
+  const colors = ['violet', 'cyan', 'emerald', 'amber', 'rose', 'slate'] as const;
+  if (typeof body.color !== 'string' || !colors.includes(body.color as (typeof colors)[number])) {
+    return err('key_invalid', '`color` must be one of the brand colours');
+  }
+  const propErr = validateProps(body.properties as SchemaProp[]);
+  if (propErr) return propErr;
+  return {
+    name: trimmedName,
+    key: body.key,
+    description: typeof body.description === 'string' ? body.description : '',
+    color: body.color as NormalizedBody['color'],
+    icon: body.icon,
+    tags: body.tags.filter((t): t is string => typeof t === 'string'),
+    properties: body.properties as SchemaProp[],
+  };
 }
 
 export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
@@ -193,37 +293,16 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
         return reply.code(403).send({ error: 'viewer cannot create schemas' });
       }
       const body = request.body;
-
-      const trimmedName = typeof body?.name === 'string' ? body.name.trim() : '';
-      if (!trimmedName) {
-        return reply.code(400).send(err('name_required', '`name` is required'));
-      }
-      if (typeof body?.key !== 'string' || !KEY_RE.test(body.key)) {
+      const normalized = normalizeAndValidateBody(body);
+      if ('code' in normalized) {
         return reply
           .code(400)
-          .send(err('key_invalid', '`key` must match ^[a-z][a-z0-9-]{0,39}$'));
-      }
-      if (!Array.isArray(body.tags)) {
-        return reply.code(400).send(err('key_invalid', '`tags` must be an array'));
-      }
-      if (typeof body.icon !== 'string' || !body.icon) {
-        return reply.code(400).send(err('key_invalid', '`icon` is required'));
-      }
-      if (
-        typeof body.color !== 'string' ||
-        !['violet', 'cyan', 'emerald', 'amber', 'rose', 'slate'].includes(body.color)
-      ) {
-        return reply.code(400).send(err('key_invalid', '`color` must be one of the brand colours'));
-      }
-
-      const propErr = validateProps(body.properties as SchemaProp[]);
-      if (propErr) {
-        return reply.code(400).send({ error: propErr.message, code: propErr.code, detail: propErr.detail });
+          .send({ error: normalized.message, code: normalized.code, detail: normalized.detail });
       }
 
       const existingByKey = await db.schemas.findOne({
         workspaceId: request.params.wsId,
-        key: body.key,
+        key: normalized.key,
       });
       if (existingByKey) {
         return reply.code(400).send(err('key_taken', '`key` already in use in this workspace'));
@@ -235,7 +314,7 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
         .toArray();
       const byKey = new Map<string, SchemaDoc>(allInWs.map((s) => [s.key, s]));
 
-      const refs = collectRefs(body.properties as SchemaProp[]);
+      const refs = collectRefs(normalized.properties);
       for (const r of refs) {
         if (!byKey.has(r.targetKey)) {
           return reply.code(400).send(
@@ -254,7 +333,7 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
         refs: Array.from(new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey))),
       }));
       const newRefs = Array.from(new Set(refs.map((r) => r.targetKey)));
-      const cycle = findCycle(body.key, newRefs, existingForCycle);
+      const cycle = findCycle(normalized.key, newRefs, existingForCycle);
       if (cycle) {
         return reply
           .code(400)
@@ -266,19 +345,214 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
         id: `sch_${nanoid(16)}`,
         workspaceId: request.params.wsId,
         orgId: ctx.workspace.orgId,
-        key: body.key,
-        name: trimmedName,
-        description: typeof body.description === 'string' ? body.description : '',
-        color: body.color,
-        icon: body.icon,
-        tags: body.tags.filter((t): t is string => typeof t === 'string'),
-        properties: body.properties as SchemaProp[],
+        key: normalized.key,
+        name: normalized.name,
+        description: normalized.description,
+        color: normalized.color,
+        icon: normalized.icon,
+        tags: normalized.tags,
+        properties: normalized.properties,
         createdBy: ctx.auth.userId,
         createdAt: now,
         updatedAt: now,
       };
       await db.schemas.insertOne(doc as SchemaDoc);
       return reply.code(201).send(doc);
+    },
+  );
+
+  app.put<{ Params: IdParams; Body: UpdateSchemaBody }>(
+    '/workspaces/:wsId/schemas/:id',
+    async (request, reply) => {
+      const ctx = await resolveWorkspace(request, reply, request.params.wsId);
+      if (!ctx) return;
+      if (ctx.auth.role === 'viewer') {
+        return reply.code(403).send({ error: 'viewer cannot update schemas' });
+      }
+      const body = request.body;
+      if (typeof body?.expectedUpdatedAt !== 'string') {
+        return reply.code(400).send(err('key_invalid', '`expectedUpdatedAt` is required'));
+      }
+
+      const existing = await db.schemas.findOne(
+        { workspaceId: request.params.wsId, id: request.params.id },
+        { projection: { _id: 0 } },
+      );
+      if (!existing) return reply.code(404).send({ error: 'schema not found' });
+
+      if (existing.updatedAt !== body.expectedUpdatedAt) {
+        return reply.code(409).send(
+          err('stale_update', 'Schema was modified by someone else', {
+            currentUpdatedAt: existing.updatedAt,
+          }),
+        );
+      }
+
+      const normalized = normalizeAndValidateBody(body);
+      if ('code' in normalized) {
+        return reply
+          .code(400)
+          .send({ error: normalized.message, code: normalized.code, detail: normalized.detail });
+      }
+
+      // Key-uniqueness check (only if changed).
+      if (normalized.key !== existing.key) {
+        const collision = await db.schemas.findOne({
+          workspaceId: request.params.wsId,
+          key: normalized.key,
+          id: { $ne: request.params.id },
+        });
+        if (collision) {
+          return reply.code(400).send(err('key_taken', '`key` already in use in this workspace'));
+        }
+      }
+
+      const allInWs = await db.schemas
+        .find({ workspaceId: request.params.wsId }, { projection: { _id: 0 } })
+        .toArray();
+      const byKey = new Map<string, SchemaDoc>(allInWs.map((s) => [s.key, s]));
+      // Treat target schema as present under its new key for ref resolution.
+      byKey.delete(existing.key);
+      byKey.set(normalized.key, existing as SchemaDoc);
+
+      const refs = collectRefs(normalized.properties);
+      for (const r of refs) {
+        if (r.targetKey === normalized.key) continue; // self-ref allowed; cycle check is separate
+        if (!byKey.has(r.targetKey)) {
+          return reply.code(400).send(
+            err('ref_target_missing', `Reference points to missing schema: ${r.targetKey}`, {
+              path: r.fromPath,
+              targetKey: r.targetKey,
+              targetField: r.targetField,
+            }),
+          );
+        }
+      }
+
+      const otherSchemas = allInWs.filter((s) => s.id !== existing.id);
+      const existingForCycle = otherSchemas.map((s) => ({
+        key: s.key,
+        refs: Array.from(new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey))),
+      }));
+      const newRefs = Array.from(new Set(refs.map((r) => r.targetKey)));
+      const cycle = findCycle(normalized.key, newRefs, existingForCycle);
+      if (cycle) {
+        return reply
+          .code(400)
+          .send(err('cycle_detected', 'Reference graph contains a cycle', { cycle }));
+      }
+
+      const keyChanged = normalized.key !== existing.key;
+      const now = new Date().toISOString();
+      const updated: Schema = {
+        ...(existing as Schema),
+        key: normalized.key,
+        name: normalized.name,
+        description: normalized.description,
+        color: normalized.color,
+        icon: normalized.icon,
+        tags: normalized.tags,
+        properties: normalized.properties,
+        updatedAt: now,
+      };
+
+      if (keyChanged) {
+        const state: { error: ValidationError | null } = { error: null };
+
+        const runCascade = async (session: ClientSession | null): Promise<void> => {
+          const sessionOpt = session ? { session } : {};
+          // 1. Update the target schema (with optimistic concurrency).
+          const res = await db.schemas.updateOne(
+            {
+              workspaceId: request.params.wsId,
+              id: request.params.id,
+              updatedAt: existing.updatedAt,
+            },
+            { $set: { ...updated } },
+            sessionOpt,
+          );
+          if (res.matchedCount === 0) {
+            state.error = err('stale_update', 'Schema was modified by someone else', {});
+            if (session) await session.abortTransaction();
+            return;
+          }
+
+          // 2. Rewrite peer refs.
+          const peers = await db.schemas
+            .find(
+              { workspaceId: request.params.wsId, id: { $ne: request.params.id } },
+              { projection: { _id: 0 }, ...sessionOpt },
+            )
+            .toArray();
+          for (const peer of peers) {
+            const peerProps = peer.properties as SchemaProp[];
+            if (rewriteRefsInTree(peerProps, existing.key, normalized.key)) {
+              await db.schemas.updateOne(
+                { workspaceId: request.params.wsId, id: peer.id },
+                { $set: { properties: peerProps, updatedAt: now } },
+                sessionOpt,
+              );
+            }
+          }
+
+          // 3. Re-run cycle detection against the post-rename state.
+          const after = await db.schemas
+            .find(
+              { workspaceId: request.params.wsId },
+              { projection: { _id: 0 }, ...sessionOpt },
+            )
+            .toArray();
+          const graph = after.map((s) => ({
+            key: s.key,
+            refs: Array.from(
+              new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey)),
+            ),
+          }));
+          const cycleAfter = detectCycleInGraph(graph);
+          if (cycleAfter) {
+            state.error = err('key_rewrite_failed', 'Renaming this key would introduce a cycle', {
+              cycle: cycleAfter,
+            });
+            if (session) await session.abortTransaction();
+            return;
+          }
+        };
+
+        const session = db.client.startSession();
+        try {
+          try {
+            await session.withTransaction(async () => {
+              await runCascade(session);
+            });
+          } catch (e) {
+            if (!isReplicaSetUnsupported(e)) throw e;
+            // Local dev mongo isn't a replica set — fall back to sequential writes.
+            // TODO: require replica-set in dev so the cascade is atomic.
+            request.log.warn(
+              { err: e },
+              'mongo is not a replica set; running key-rename cascade non-transactionally',
+            );
+            state.error = null;
+            await runCascade(null);
+          }
+        } finally {
+          await session.endSession();
+        }
+
+        if (state.error) {
+          const code = state.error.code === 'stale_update' ? 409 : 400;
+          return reply
+            .code(code)
+            .send({ error: state.error.message, code: state.error.code, detail: state.error.detail });
+        }
+        return reply.send(updated);
+      }
+
+      await db.schemas.updateOne(
+        { workspaceId: request.params.wsId, id: request.params.id, updatedAt: existing.updatedAt },
+        { $set: { ...updated } },
+      );
+      return reply.send(updated);
     },
   );
 

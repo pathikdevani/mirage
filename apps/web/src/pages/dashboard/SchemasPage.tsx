@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router';
 import { Database, Plus } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
 import { bff } from '../../api/client.js';
 import { ListPane } from './schemas/ListPane.js';
-import { ViewerPane } from './schemas/ViewerPane.js';
+import { EditPane } from './schemas/EditPane/EditPane.js';
 import { PreviewPane } from './schemas/PreviewPane.js';
 import { CreateSchemaSheet } from './schemas/CreateSchemaSheet/index.js';
 import type { Schema } from './schemas/lib/types.js';
@@ -15,7 +15,10 @@ export function SchemasPage() {
   const [params, setParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
-  const [deleteError, setDeleteError] = useState<{ id: string; referrers: string[] } | null>(null);
+  const [pendingNavId, setPendingNavId] = useState<string | null>(null);
+
+  // The EditPane reports its dirty state up here so we can intercept activeId changes.
+  const dirtyRef = useRef(false);
 
   const activeId = params.get('active');
 
@@ -57,33 +60,8 @@ export function SchemasPage() {
     staleTime: 30_000,
   });
 
-  const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await bff.DELETE('/workspaces/{wsId}/schemas/{id}', {
-        params: { path: { wsId: wsId!, id } },
-      });
-      if (error) throw error as { code?: string; detail?: { referrers?: string[] } };
-      return id;
-    },
-    onSuccess: async (id) => {
-      await queryClient.invalidateQueries({ queryKey: ['schemas', wsId] });
-      if (activeId === id) {
-        const next = new URLSearchParams(params);
-        next.delete('active');
-        setParams(next, { replace: true });
-      }
-      setDeleteError(null);
-    },
-    onError: (err: { code?: string; detail?: { referrers?: string[] } }, id) => {
-      if (err?.code === 'ref_in_use' && err.detail?.referrers) {
-        setDeleteError({ id, referrers: err.detail.referrers });
-      }
-    },
-  });
-
   const schemas = list.data ?? [];
 
-  // Auto-select first schema when none selected.
   useEffect(() => {
     if (!activeId && schemas.length > 0) {
       const next = new URLSearchParams(params);
@@ -97,16 +75,25 @@ export function SchemasPage() {
     return schemas.find((s) => s.id === activeId) ?? null;
   }, [active.data, schemas, activeId]);
 
-  const selectSchema = (id: string): void => {
+  const commitSelect = (id: string | null): void => {
     const next = new URLSearchParams(params);
-    next.set('active', id);
+    if (id) next.set('active', id);
+    else next.delete('active');
     setParams(next, { replace: true });
-    setDeleteError(null);
+  };
+
+  const requestSelect = (id: string): void => {
+    if (id === activeId) return;
+    if (dirtyRef.current) {
+      setPendingNavId(id);
+      return;
+    }
+    commitSelect(id);
   };
 
   const selectByKey = (key: string): void => {
     const target = schemas.find((s) => s.key === key);
-    if (target) selectSchema(target.id);
+    if (target) requestSelect(target.id);
   };
 
   const isEmpty = !list.isLoading && schemas.length === 0;
@@ -146,19 +133,23 @@ export function SchemasPage() {
           <ListPane
             schemas={schemas}
             activeId={activeId}
-            onSelect={selectSchema}
+            onSelect={requestSelect}
           />
           <div className="min-h-0">
             {activeSchema ? (
-              <ViewerPane
+              <EditPane
+                key={activeSchema.id}
                 schema={activeSchema}
-                onDelete={() => remove.mutate(activeSchema.id)}
-                deleteError={
-                  deleteError && deleteError.id === activeSchema.id
-                    ? { referrers: deleteError.referrers }
-                    : null
-                }
-                onClearDeleteError={() => setDeleteError(null)}
+                workspaceSchemas={schemas}
+                wsId={wsId!}
+                onDirtyChange={(dirty) => {
+                  dirtyRef.current = dirty;
+                }}
+                onDeleted={() => {
+                  dirtyRef.current = false;
+                  commitSelect(null);
+                  queryClient.invalidateQueries({ queryKey: ['schemas', wsId] });
+                }}
                 onSelectReferrer={selectByKey}
               />
             ) : (
@@ -179,7 +170,19 @@ export function SchemasPage() {
           onClose={() => setCreating(false)}
           onCreated={(s) => {
             setCreating(false);
-            selectSchema(s.id);
+            commitSelect(s.id);
+          }}
+        />
+      )}
+
+      {pendingNavId && (
+        <DiscardChangesModal
+          onCancel={() => setPendingNavId(null)}
+          onConfirm={() => {
+            const target = pendingNavId;
+            setPendingNavId(null);
+            dirtyRef.current = false;
+            commitSelect(target);
           }}
         />
       )}
@@ -215,6 +218,41 @@ function EmptyState({ onCreate }: EmptyStateProps) {
         <Plus size={14} strokeWidth={2.5} />
         New schema
       </button>
+    </div>
+  );
+}
+
+function DiscardChangesModal({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 p-4">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-lg">
+        <h3 className="text-[15px] font-semibold text-foreground">Discard unsaved changes?</h3>
+        <p className="mt-1.5 text-[13px] text-muted-foreground">
+          You have unsaved changes to this schema. Switching now will discard them.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-9 rounded-md border border-input bg-background px-3 text-[12.5px] font-medium text-foreground hover:bg-accent"
+          >
+            Keep editing
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="h-9 rounded-md bg-destructive px-3 text-[12.5px] font-medium text-destructive-foreground hover:opacity-90"
+          >
+            Discard changes
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

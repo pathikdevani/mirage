@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { Eye, Tag } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
-import { BRAND_COLORS, KEY_RE, type BrandColor, type IconName } from '../lib/types.js';
+import { KEY_RE, type BrandColor, type IconName } from '../lib/types.js';
 import { COLOR_BG } from '../lib/colors.js';
-import { ICON_ENTRIES, resolveIcon } from '../lib/icon.js';
+import { resolveIcon } from '../lib/icon.js';
+import { IdentityPopover } from '../IdentityPopover.js';
 
 export type AvailabilityState = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
@@ -149,51 +150,18 @@ export function Step1Details(props: Step1Props) {
         </p>
       </div>
 
-      <div className="grid grid-cols-[180px_1fr] items-start gap-4">
-        <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-foreground">
-            Color
-          </label>
-          <div className="flex gap-2">
-            {BRAND_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                aria-label={c}
-                onClick={() => setColor(c)}
-                className={cn(
-                  'h-7 w-7 rounded-full transition-transform',
-                  COLOR_BG[c],
-                  color === c && 'ring-2 ring-foreground ring-offset-2 ring-offset-card',
-                )}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-foreground">
-            Icon
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            {ICON_ENTRIES.map(([n, I]) => (
-              <button
-                key={n}
-                type="button"
-                aria-label={n}
-                onClick={() => setIcon(n)}
-                className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-md border transition-colors',
-                  icon === n
-                    ? 'border-foreground bg-accent text-foreground'
-                    : 'border-input bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground',
-                )}
-              >
-                <I size={14} strokeWidth={2} />
-              </button>
-            ))}
-          </div>
-        </div>
+      <div>
+        <label className="mb-1.5 block text-[12px] font-medium text-foreground">
+          Appearance
+        </label>
+        <IdentityPopover
+          color={color}
+          icon={icon}
+          onChange={(next) => {
+            setColor(next.color);
+            setIcon(next.icon);
+          }}
+        />
       </div>
 
       <div>

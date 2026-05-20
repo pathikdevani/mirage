@@ -69,6 +69,15 @@ export function registerSchemaProxyRoutes(app: FastifyInstance): void {
         `/workspaces/${encodeURIComponent(req.params.wsId)}/schemas/${encodeURIComponent(req.params.id)}`,
       ),
   );
+  app.put<{ Params: { wsId: string; id: string } }>(
+    '/workspaces/:wsId/schemas/:id',
+    (req, reply) =>
+      forward(
+        req,
+        reply,
+        `/workspaces/${encodeURIComponent(req.params.wsId)}/schemas/${encodeURIComponent(req.params.id)}`,
+      ),
+  );
   app.delete<{ Params: { wsId: string; id: string } }>(
     '/workspaces/:wsId/schemas/:id',
     (req, reply) =>
