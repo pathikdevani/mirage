@@ -9,23 +9,24 @@ import { PREVIEWS_QUEUE, RUNS_QUEUE, cancelFlagKey, runChannel } from './queues.
  * Recover runs left at `status: 'running'` by a previous worker process that
  * died mid-execution (tsx watch restart, Ctrl-C of `pnpm dev`, crash, SIGKILL).
  *
- * Aggressive (dev-friendly) recovery: on startup we ARE the worker, and this
- * codebase only runs a single worker process. Any Mongo run still tagged
- * `running` MUST be orphaned, period — no live processor is keeping it alive.
- * BullMQ's own `active` list is stale after a SIGKILL because the dead
- * processor never released its job lock; we can't rely on `active` to tell
- * us which runs are still being processed.
+ * Per-run liveness check: before marking a run failed we verify that no peer
+ * worker is still actively processing it. BullMQ holds a TTL'd lock key
+ * (`bull:<queue>:<jobId>:lock`) for the duration of `Worker.process`; if that
+ * key is still present, another live worker owns the job and recovery must
+ * leave it alone. Without this check, every worker startup (including a
+ * `tsx watch` restart in dev) would blow away every in-flight run.
  *
  * We:
  *   1. Find every Mongo run with status='running'.
- *   2. Mark each as 'cancelled' (if a cancel flag was set) or 'failed'
- *      (otherwise), publish the matching terminal event, clear cancel flag.
- *   3. Drop the corresponding BullMQ job from `active` so it can't be
+ *   2. Skip any whose BullMQ lock is still held — a peer worker has it.
+ *   3. For the rest, mark 'cancelled' (if a cancel flag was set) or 'failed',
+ *      publish the matching terminal event, and clear the cancel flag.
+ *   4. Drop the corresponding BullMQ job from `active` so it can't be
  *      re-picked by the stalled-job check 30 s later.
- *
- * Caveat: in a multi-worker production deployment this would race with peer
- * workers. Add an opt-out (env flag) before deploying with N>1 workers.
  */
+const lockKey = (queueName: string, runId: string): string =>
+  `bull:${queueName}:${runId}:lock`;
+
 export async function recoverOrphanedRuns(args: {
   db: WorkerDb;
   publisher: Redis;
@@ -54,8 +55,18 @@ export async function recoverOrphanedRuns(args: {
     const endedAt = new Date().toISOString();
     const cancelled: string[] = [];
     const failed: string[] = [];
+    const skipped: string[] = [];
 
     for (const r of runningRuns) {
+      const [runLock, prevLock] = await Promise.all([
+        bullConnection.get(lockKey(RUNS_QUEUE, r.id)),
+        bullConnection.get(lockKey(PREVIEWS_QUEUE, r.id)),
+      ]);
+      if (runLock !== null || prevLock !== null) {
+        skipped.push(r.id);
+        continue;
+      }
+
       const wasCancelled = (await cancelRedis.get(cancelFlagKey(r.id as RunId))) === '1';
       const status = wasCancelled ? 'cancelled' : 'failed';
       const errorMessage = wasCancelled
@@ -114,8 +125,10 @@ export async function recoverOrphanedRuns(args: {
       {
         cancelledCount: cancelled.length,
         failedCount: failed.length,
+        skippedCount: skipped.length,
         cancelled,
         failed,
+        skipped,
       },
       'recovered orphaned runs from previous worker session',
     );

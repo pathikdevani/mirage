@@ -178,6 +178,63 @@ describe('recoverOrphanedRuns (integration vs real Mongo + Redis)', () => {
     }
   });
 
+  it('skips runs whose BullMQ lock is still held by a peer worker', async () => {
+    // Scenario: another worker is currently processing this run (its lock key
+    // exists with a non-zero TTL). Recovery must NOT mark the run failed —
+    // otherwise a fresh worker startup (e.g. a tsx watch restart in dev) blows
+    // away an in-flight run, which is the failure path that caused the user's
+    // "fails at 321,500 rows" reports.
+    const runId = `run_orphan_locked_${nanoid()}`;
+    const orgId = `org_test_${nanoid()}`;
+    insertedRunIds.add(runId);
+
+    await insertFakeRun(mongo, { runId, orgId });
+    const lockKey = `bull:${RUNS_QUEUE}:${runId}:lock`;
+    await bullConnection.set(lockKey, 'peer-worker-token', 'EX', 60);
+
+    const subscriber = new IORedis(REDIS_URL);
+    const channel = `org:${orgId}:run:${runId}`;
+    const received: unknown[] = [];
+    await subscriber.subscribe(channel);
+    subscriber.on('message', (_ch, payload) => {
+      try {
+        received.push(JSON.parse(payload));
+      } catch {
+        /* ignore */
+      }
+    });
+
+    try {
+      await recoverOrphanedRuns({
+        db: makeWorkerDbShim(mongo),
+        publisher: redisShared,
+        cancelRedis: redisShared,
+        bullConnection,
+        logger,
+      });
+
+      // Mongo must still show running — peer worker is in charge of this run.
+      const after = await mongo.db(MONGO_DB).collection<MockRunDoc>('runs').findOne({ id: runId });
+      expect(after?.status).toBe('running');
+      expect(after?.endedAt).toBeUndefined();
+      expect(after?.errorMessage).toBeUndefined();
+
+      // No terminal event should have been published.
+      await sleep(150);
+      const terminal = received.filter(
+        (e): e is { type: string } =>
+          typeof e === 'object' &&
+          e !== null &&
+          ['run.failed', 'run.cancelled', 'run.completed'].includes((e as { type?: string }).type ?? ''),
+      );
+      expect(terminal, `unexpected terminal event(s) published: ${JSON.stringify(terminal)}`).toEqual([]);
+    } finally {
+      await bullConnection.del(lockKey);
+      await subscriber.unsubscribe(channel);
+      subscriber.disconnect();
+    }
+  });
+
   it('removes the orphan from the BullMQ active set so it cannot be re-picked', async () => {
     const runId = `run_orphan_bullmq_${nanoid()}`;
     const orgId = `org_test_${nanoid()}`;
