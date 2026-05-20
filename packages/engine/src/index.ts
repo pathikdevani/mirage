@@ -11,3 +11,4 @@ export * from './cycle.js';
 export * from './custom-function-registry.js';
 export * from './resolve-schema.js';
 export * from './apply-strategy.js';
+export * from './extract-set-edges.js';

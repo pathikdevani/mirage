@@ -3,6 +3,7 @@ import type { Api, Membership, OrgId, UserId, Workspace, WorkspaceId } from '@mi
 import { env } from './env.js';
 
 export type SchemaDoc = Api.components['schemas']['Schema'];
+export type SetDoc = Api.components['schemas']['Set'];
 
 /**
  * Mongo wrapper. Single client, two collections we care about today
@@ -19,6 +20,7 @@ export interface MirageDb {
   workspaces: Collection<Workspace>;
   memberships: Collection<Membership>;
   schemas: Collection<SchemaDoc>;
+  sets: Collection<SetDoc>;
 }
 
 export async function connectDb(): Promise<MirageDb> {
@@ -29,6 +31,7 @@ export async function connectDb(): Promise<MirageDb> {
   const workspaces = db.collection<Workspace>('workspaces');
   const memberships = db.collection<Membership>('memberships');
   const schemas = db.collection<SchemaDoc>('schemas');
+  const sets = db.collection<SetDoc>('sets');
 
   await Promise.all([
     workspaces.createIndex({ orgId: 1, id: 1 }, { unique: true }),
@@ -38,9 +41,12 @@ export async function connectDb(): Promise<MirageDb> {
     schemas.createIndex({ workspaceId: 1, key: 1 }, { unique: true }),
     schemas.createIndex({ workspaceId: 1, updatedAt: -1 }),
     schemas.createIndex({ orgId: 1, workspaceId: 1 }),
+    sets.createIndex({ workspaceId: 1, key: 1 }, { unique: true }),
+    sets.createIndex({ workspaceId: 1, updatedAt: -1 }),
+    sets.createIndex({ orgId: 1, workspaceId: 1 }),
   ]);
 
-  return { client, db, workspaces, memberships, schemas };
+  return { client, db, workspaces, memberships, schemas, sets };
 }
 
 /**

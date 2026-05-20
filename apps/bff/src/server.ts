@@ -8,6 +8,7 @@ import { registerHealthRoute } from './routes/health.js';
 import { registerMeRoute } from './routes/me.js';
 import { registerWorkspaceProxyRoutes } from './routes/workspaces.js';
 import { registerSchemaProxyRoutes } from './routes/schemas.js';
+import { registerSetProxyRoutes } from './routes/sets.js';
 import { registerWsRoute } from './routes/ws.js';
 
 export type Server = Awaited<ReturnType<typeof buildServer>>;
@@ -42,6 +43,7 @@ export async function buildServer() {
   registerMeRoute(app);
   registerWorkspaceProxyRoutes(app);
   registerSchemaProxyRoutes(app);
+  registerSetProxyRoutes(app);
   registerWsRoute(app);
 
   return app;

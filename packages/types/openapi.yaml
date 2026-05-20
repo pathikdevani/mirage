@@ -214,6 +214,113 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /workspaces/{wsId}/sets:
+    parameters:
+      - in: path
+        name: wsId
+        required: true
+        schema: { type: string }
+    get:
+      summary: List Sets in a Workspace
+      operationId: listSets
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Set' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      summary: Create a Set in a Workspace
+      operationId: createSet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSetBody' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Set' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /workspaces/{wsId}/sets/{id}:
+    parameters:
+      - in: path
+        name: wsId
+        required: true
+        schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get a Set by id
+      operationId: getSet
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Set' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      summary: Update a Set
+      operationId: updateSet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSetBody' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Set' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      summary: Delete a Set
+      operationId: deleteSet
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /workspaces/{wsId}/sets/{id}/edges:
+    parameters:
+      - in: path
+        name: wsId
+        required: true
+        schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      summary: Computed cross-schema reference edges for this Set
+      operationId: getSetEdges
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SetEdge' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -370,6 +477,177 @@ components:
           items:
             $ref: '#/components/schemas/SchemaProp'
         expectedUpdatedAt: { type: string, format: date-time }
+
+    Strategy:
+      oneOf:
+        - type: object
+          required: [type]
+          additionalProperties: false
+          properties:
+            type: { type: string, enum: ['1:1'] }
+        - type: object
+          required: [type]
+          additionalProperties: false
+          properties:
+            type: { type: string, enum: ['random'] }
+            allowDuplicates: { type: boolean }
+        - type: object
+          required: [type]
+          additionalProperties: false
+          properties:
+            type: { type: string, enum: ['evenSplit'] }
+
+    StrategyOverride:
+      type: object
+      required: [schemaKey, fieldPath, strategy]
+      additionalProperties: false
+      properties:
+        schemaKey: { type: string }
+        fieldPath: { type: string }
+        strategy: { $ref: '#/components/schemas/Strategy' }
+
+    SetSchemaInclusion:
+      type: object
+      required: [schemaKey, count]
+      additionalProperties: false
+      properties:
+        schemaKey: { type: string }
+        count: { type: integer, minimum: 0, maximum: 10000000 }
+
+    SetOutputConfig:
+      type: object
+      required: [format, locale, workerPool]
+      additionalProperties: false
+      properties:
+        format: { type: string, enum: [json, ndjson, csv, sql, parquet] }
+        locale: { type: string, minLength: 2, maxLength: 16 }
+        workerPool: { type: integer, minimum: 1, maximum: 64 }
+
+    Set:
+      type: object
+      required:
+        - id
+        - workspaceId
+        - orgId
+        - key
+        - name
+        - description
+        - color
+        - icon
+        - tags
+        - salt
+        - schemas
+        - strategies
+        - output
+        - createdBy
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        orgId: { type: string }
+        key:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,39}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        color:
+          type: string
+          enum: [violet, cyan, emerald, amber, rose, slate]
+        icon: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        salt: { type: string, minLength: 1, maxLength: 64 }
+        schemas:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/SetSchemaInclusion' }
+        strategies:
+          type: array
+          items: { $ref: '#/components/schemas/StrategyOverride' }
+        output: { $ref: '#/components/schemas/SetOutputConfig' }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateSetBody:
+      type: object
+      required: [key, name, color, icon, tags, salt, schemas, strategies, output]
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,39}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        color:
+          type: string
+          enum: [violet, cyan, emerald, amber, rose, slate]
+        icon: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        salt: { type: string, minLength: 1, maxLength: 64 }
+        schemas:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/SetSchemaInclusion' }
+        strategies:
+          type: array
+          items: { $ref: '#/components/schemas/StrategyOverride' }
+        output: { $ref: '#/components/schemas/SetOutputConfig' }
+
+    UpdateSetBody:
+      type: object
+      required:
+        - key
+        - name
+        - color
+        - icon
+        - tags
+        - salt
+        - schemas
+        - strategies
+        - output
+        - expectedUpdatedAt
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{0,39}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500 }
+        color:
+          type: string
+          enum: [violet, cyan, emerald, amber, rose, slate]
+        icon: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        salt: { type: string, minLength: 1, maxLength: 64 }
+        schemas:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/SetSchemaInclusion' }
+        strategies:
+          type: array
+          items: { $ref: '#/components/schemas/StrategyOverride' }
+        output: { $ref: '#/components/schemas/SetOutputConfig' }
+        expectedUpdatedAt: { type: string, format: date-time }
+
+    SetEdge:
+      type: object
+      required: [fromSchemaKey, fromFieldPath, toSchemaKey, cardinality]
+      additionalProperties: false
+      properties:
+        fromSchemaKey: { type: string }
+        fromFieldPath: { type: string }
+        toSchemaKey: { type: string }
+        cardinality:
+          type: string
+          enum: [one, many]
 
     ErrorResponse:
       type: object

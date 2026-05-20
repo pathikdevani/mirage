@@ -47,7 +47,9 @@ function validateProps(properties: SchemaProp[]): ValidationError | null {
         return err('property_name_invalid', `Invalid property name: ${p.name}`, { name: p.name });
       }
       if (seen.has(p.name)) {
-        return err('property_name_duplicate', `Duplicate property name at this depth: ${p.name}`, { name: p.name });
+        return err('property_name_duplicate', `Duplicate property name at this depth: ${p.name}`, {
+          name: p.name,
+        });
       }
       seen.add(p.name);
 
@@ -70,7 +72,9 @@ function validateProps(properties: SchemaProp[]): ValidationError | null {
 }
 
 /** Walk every faker `$ref:` in the tree and return [{ targetKey, fromPath }]. */
-function collectRefs(properties: SchemaProp[]): { targetKey: string; targetField: string; fromPath: string }[] {
+function collectRefs(
+  properties: SchemaProp[],
+): { targetKey: string; targetField: string; fromPath: string }[] {
   const out: { targetKey: string; targetField: string; fromPath: string }[] = [];
   const walk = (props: SchemaProp[], path: string): void => {
     for (const p of props) {
@@ -158,7 +162,9 @@ function findCycle(
   for (const s of existing) adj.set(s.key, new Set(s.refs));
   adj.set(newKey, new Set(newRefs));
 
-  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const WHITE = 0,
+    GRAY = 1,
+    BLACK = 2;
   const color = new Map<string, number>();
   const stack: string[] = [];
   let cyclePath: string[] | null = null;
@@ -202,7 +208,9 @@ interface NormalizedBody {
   properties: SchemaProp[];
 }
 
-function normalizeAndValidateBody(body: CreateSchemaBody | UpdateSchemaBody): NormalizedBody | ValidationError {
+function normalizeAndValidateBody(
+  body: CreateSchemaBody | UpdateSchemaBody,
+): NormalizedBody | ValidationError {
   const trimmedName = typeof body?.name === 'string' ? body.name.trim() : '';
   if (!trimmedName) return err('name_required', '`name` is required');
   if (typeof body?.key !== 'string' || !KEY_RE.test(body.key)) {
@@ -231,11 +239,7 @@ function normalizeAndValidateBody(body: CreateSchemaBody | UpdateSchemaBody): No
 
 export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
   /** Resolve workspace and enforce tenant scope. Returns workspace or sends a response. */
-  const resolveWorkspace = async (
-    request: FastifyRequest,
-    reply: FastifyReply,
-    wsId: string,
-  ) => {
+  const resolveWorkspace = async (request: FastifyRequest, reply: FastifyReply, wsId: string) => {
     const auth = request.auth;
     if (!auth) {
       await reply.code(401).send({ error: 'unauthenticated' });
@@ -270,19 +274,16 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
     },
   );
 
-  app.get<{ Params: IdParams }>(
-    '/workspaces/:wsId/schemas/:id',
-    async (request, reply) => {
-      const ctx = await resolveWorkspace(request, reply, request.params.wsId);
-      if (!ctx) return;
-      const row = await db.schemas.findOne(
-        { workspaceId: request.params.wsId, id: request.params.id },
-        { projection: { _id: 0 } },
-      );
-      if (!row) return reply.code(404).send({ error: 'schema not found' });
-      return reply.send(row);
-    },
-  );
+  app.get<{ Params: IdParams }>('/workspaces/:wsId/schemas/:id', async (request, reply) => {
+    const ctx = await resolveWorkspace(request, reply, request.params.wsId);
+    if (!ctx) return;
+    const row = await db.schemas.findOne(
+      { workspaceId: request.params.wsId, id: request.params.id },
+      { projection: { _id: 0 } },
+    );
+    if (!row) return reply.code(404).send({ error: 'schema not found' });
+    return reply.send(row);
+  });
 
   app.post<{ Params: ListParams; Body: CreateSchemaBody }>(
     '/workspaces/:wsId/schemas',
@@ -330,7 +331,9 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
       // Build cross-schema ref graph for cycle detection.
       const existingForCycle = allInWs.map((s) => ({
         key: s.key,
-        refs: Array.from(new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey))),
+        refs: Array.from(
+          new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey)),
+        ),
       }));
       const newRefs = Array.from(new Set(refs.map((r) => r.targetKey)));
       const cycle = findCycle(normalized.key, newRefs, existingForCycle);
@@ -432,7 +435,9 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
       const otherSchemas = allInWs.filter((s) => s.id !== existing.id);
       const existingForCycle = otherSchemas.map((s) => ({
         key: s.key,
-        refs: Array.from(new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey))),
+        refs: Array.from(
+          new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey)),
+        ),
       }));
       const newRefs = Array.from(new Set(refs.map((r) => r.targetKey)));
       const cycle = findCycle(normalized.key, newRefs, existingForCycle);
@@ -495,12 +500,42 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
             }
           }
 
+          // 2b. Rewrite Set inclusions + strategy overrides for this workspace.
+          //     A Set may include the renamed schema by key (in `schemas[]`) or
+          //     reference it from a strategy override (`strategies[].schemaKey`).
+          const setsInWs = await db.sets
+            .find({ workspaceId: request.params.wsId }, { projection: { _id: 0 }, ...sessionOpt })
+            .toArray();
+          for (const setDoc of setsInWs) {
+            let touched = false;
+            const newInclusions = setDoc.schemas.map((inc) => {
+              if (inc.schemaKey === existing.key) {
+                touched = true;
+                return { ...inc, schemaKey: normalized.key };
+              }
+              return inc;
+            });
+            const newStrategies = setDoc.strategies.map((ov) => {
+              if (ov.schemaKey === existing.key) {
+                touched = true;
+                return { ...ov, schemaKey: normalized.key };
+              }
+              return ov;
+            });
+            if (touched) {
+              await db.sets.updateOne(
+                { workspaceId: request.params.wsId, id: setDoc.id },
+                {
+                  $set: { schemas: newInclusions, strategies: newStrategies, updatedAt: now },
+                },
+                sessionOpt,
+              );
+            }
+          }
+
           // 3. Re-run cycle detection against the post-rename state.
           const after = await db.schemas
-            .find(
-              { workspaceId: request.params.wsId },
-              { projection: { _id: 0 }, ...sessionOpt },
-            )
+            .find({ workspaceId: request.params.wsId }, { projection: { _id: 0 }, ...sessionOpt })
             .toArray();
           const graph = after.map((s) => ({
             key: s.key,
@@ -541,9 +576,11 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
 
         if (state.error) {
           const code = state.error.code === 'stale_update' ? 409 : 400;
-          return reply
-            .code(code)
-            .send({ error: state.error.message, code: state.error.code, detail: state.error.detail });
+          return reply.code(code).send({
+            error: state.error.message,
+            code: state.error.code,
+            detail: state.error.detail,
+          });
         }
         return reply.send(updated);
       }
@@ -556,42 +593,61 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
     },
   );
 
-  app.delete<{ Params: IdParams }>(
-    '/workspaces/:wsId/schemas/:id',
-    async (request, reply) => {
-      const ctx = await resolveWorkspace(request, reply, request.params.wsId);
-      if (!ctx) return;
-      if (ctx.auth.role === 'viewer') {
-        return reply.code(403).send({ error: 'viewer cannot delete schemas' });
-      }
-      const row = await db.schemas.findOne(
-        { workspaceId: request.params.wsId, id: request.params.id },
+  app.delete<{ Params: IdParams }>('/workspaces/:wsId/schemas/:id', async (request, reply) => {
+    const ctx = await resolveWorkspace(request, reply, request.params.wsId);
+    if (!ctx) return;
+    if (ctx.auth.role === 'viewer') {
+      return reply.code(403).send({ error: 'viewer cannot delete schemas' });
+    }
+    const row = await db.schemas.findOne(
+      { workspaceId: request.params.wsId, id: request.params.id },
+      { projection: { _id: 0 } },
+    );
+    if (!row) return reply.code(404).send({ error: 'schema not found' });
+
+    // Reject delete if any other schema in this workspace references this key.
+    const peers = await db.schemas
+      .find(
+        { workspaceId: request.params.wsId, id: { $ne: request.params.id } },
         { projection: { _id: 0 } },
+      )
+      .toArray();
+    const referrers: string[] = [];
+    for (const peer of peers) {
+      const refs = collectRefs(peer.properties as SchemaProp[]);
+      if (refs.some((r) => r.targetKey === row.key)) referrers.push(peer.key);
+    }
+    if (referrers.length > 0) {
+      return reply.code(400).send(
+        err('ref_in_use', `Schema is referenced by: ${referrers.join(', ')}`, {
+          referrers,
+        }),
       );
-      if (!row) return reply.code(404).send({ error: 'schema not found' });
+    }
 
-      // Reject delete if any other schema in this workspace references this key.
-      const peers = await db.schemas
-        .find(
-          { workspaceId: request.params.wsId, id: { $ne: request.params.id } },
-          { projection: { _id: 0 } },
-        )
-        .toArray();
-      const referrers: string[] = [];
-      for (const peer of peers) {
-        const refs = collectRefs(peer.properties as SchemaProp[]);
-        if (refs.some((r) => r.targetKey === row.key)) referrers.push(peer.key);
+    // Also reject if any Set in this workspace includes this schema.
+    const setReferrers: string[] = [];
+    const setsInWs = await db.sets
+      .find({ workspaceId: request.params.wsId }, { projection: { _id: 0 } })
+      .toArray();
+    for (const s of setsInWs) {
+      if (s.schemas.some((inc) => inc.schemaKey === row.key)) {
+        setReferrers.push(s.key);
       }
-      if (referrers.length > 0) {
-        return reply.code(400).send(
-          err('ref_in_use', `Schema is referenced by: ${referrers.join(', ')}`, {
-            referrers,
-          }),
+    }
+    if (setReferrers.length > 0) {
+      return reply
+        .code(400)
+        .send(
+          err(
+            'ref_in_use_by_set',
+            `Schema is included in set${setReferrers.length === 1 ? '' : 's'}: ${setReferrers.join(', ')}`,
+            { setReferrers },
+          ),
         );
-      }
+    }
 
-      await db.schemas.deleteOne({ workspaceId: request.params.wsId, id: request.params.id });
-      return reply.code(204).send();
-    },
-  );
+    await db.schemas.deleteOne({ workspaceId: request.params.wsId, id: request.params.id });
+    return reply.code(204).send();
+  });
 }
