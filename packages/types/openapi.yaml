@@ -321,6 +321,96 @@ paths:
                 items: { $ref: '#/components/schemas/SetEdge' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /workspaces/{wsId}/custom-functions:
+    parameters:
+      - in: path
+        name: wsId
+        required: true
+        schema: { type: string }
+    get:
+      summary: List Custom Functions in a Workspace
+      operationId: listCustomFunctions
+      parameters:
+        - in: query
+          name: usage
+          required: false
+          schema: { type: string, enum: [valueGenerator, strategy, both] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CustomFunction' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      summary: Create a Custom Function
+      operationId: createCustomFunction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCustomFunctionBody' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomFunction' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /workspaces/{wsId}/custom-functions/{id}:
+    parameters:
+      - in: path
+        name: wsId
+        required: true
+        schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get a Custom Function by id
+      operationId: getCustomFunction
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomFunction' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      summary: Update a Custom Function
+      operationId: updateCustomFunction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCustomFunctionBody' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomFunction' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      summary: Delete a Custom Function
+      operationId: deleteCustomFunction
+      responses:
+        '204': { description: Deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -496,6 +586,12 @@ components:
           additionalProperties: false
           properties:
             type: { type: string, enum: ['evenSplit'] }
+        - type: object
+          required: [type, functionId]
+          additionalProperties: false
+          properties:
+            type: { type: string, enum: ['custom'] }
+            functionId: { type: string }
 
     StrategyOverride:
       type: object
@@ -648,6 +744,59 @@ components:
         cardinality:
           type: string
           enum: [one, many]
+
+    CustomFunction:
+      type: object
+      required:
+        - id
+        - workspaceId
+        - orgId
+        - name
+        - description
+        - usage
+        - source
+        - createdBy
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        orgId: { type: string }
+        name:
+          type: string
+          pattern: '^[a-zA-Z_$][a-zA-Z0-9_$]{0,63}$'
+        description: { type: string, maxLength: 500 }
+        usage: { type: string, enum: [valueGenerator, strategy, both] }
+        source: { type: string, minLength: 1, maxLength: 20000 }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateCustomFunctionBody:
+      type: object
+      required: [name, usage, source]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z_$][a-zA-Z0-9_$]{0,63}$'
+        description: { type: string, maxLength: 500 }
+        usage: { type: string, enum: [valueGenerator, strategy, both] }
+        source: { type: string, minLength: 1, maxLength: 20000 }
+
+    UpdateCustomFunctionBody:
+      type: object
+      required: [name, usage, source, expectedUpdatedAt]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          pattern: '^[a-zA-Z_$][a-zA-Z0-9_$]{0,63}$'
+        description: { type: string, maxLength: 500 }
+        usage: { type: string, enum: [valueGenerator, strategy, both] }
+        source: { type: string, minLength: 1, maxLength: 20000 }
+        expectedUpdatedAt: { type: string, format: date-time }
 
     ErrorResponse:
       type: object

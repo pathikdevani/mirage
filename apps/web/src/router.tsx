@@ -8,6 +8,7 @@ import { WorkspacesPage } from './pages/workspaces/WorkspacesPage.js';
 import { WorkspaceCreatePage } from './pages/workspaces/WorkspaceCreatePage.js';
 import { SchemasPage } from './pages/dashboard/SchemasPage.js';
 import { SetsPage } from './pages/dashboard/SetsPage.js';
+import { FunctionsPage } from './pages/dashboard/FunctionsPage.js';
 import { GraphPage } from './pages/dashboard/GraphPage.js';
 import { GeneratePage } from './pages/dashboard/GeneratePage.js';
 import { HistoryPage } from './pages/dashboard/HistoryPage.js';
@@ -33,6 +34,7 @@ export function AppRouter() {
         <Route index element={<Navigate to="schemas" replace />} />
         <Route path="schemas" element={<SchemasPage />} />
         <Route path="sets" element={<SetsPage />} />
+        <Route path="functions" element={<FunctionsPage />} />
         <Route path="graph" element={<GraphPage />} />
         <Route path="generate" element={<GeneratePage />} />
         <Route path="history" element={<HistoryPage />} />

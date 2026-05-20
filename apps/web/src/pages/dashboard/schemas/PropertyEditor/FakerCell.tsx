@@ -1,8 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
-import { ChevronDown, Link2, Search } from 'lucide-react';
+import { useParams } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronDown, Code2, Link2, Search } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
+import type { Api } from '@mirage/types';
+import { bff } from '../../../../api/client.js';
 import type { Schema, SchemaProp } from '../lib/types.js';
-import { FAKER_GROUPS, REF_PREFIX } from '../lib/types.js';
+import { FAKER_GROUPS, FN_PREFIX, REF_PREFIX } from '../lib/types.js';
+
+type CustomFunction = Api.components['schemas']['CustomFunction'];
 
 export interface FakerCellProps {
   value: string;
@@ -21,14 +27,44 @@ export function FakerCell({
   workspaceSchemas,
   invalid,
 }: FakerCellProps) {
+  const { wsId } = useParams<{ wsId: string }>();
   const isRef = value.startsWith(REF_PREFIX);
+  const isFn = value.startsWith(FN_PREFIX);
   const refTarget = isRef ? value.slice(REF_PREFIX.length) : '';
-  const dot = !isRef && value ? value.indexOf('.') : -1;
+  const fnId = isFn ? value.slice(FN_PREFIX.length) : '';
+  const dot = !isRef && !isFn && value ? value.indexOf('.') : -1;
   const ns = dot < 0 ? '' : value.slice(0, dot);
   const method = dot < 0 ? value : value.slice(dot + 1);
 
   const [filter, setFilter] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const customFunctions = useQuery({
+    enabled: open && Boolean(wsId),
+    queryKey: ['custom-functions', wsId, 'usage=valueGenerator'],
+    queryFn: async (): Promise<CustomFunction[]> => {
+      const { data, error } = await bff.GET('/workspaces/{wsId}/custom-functions', {
+        params: { path: { wsId: wsId! }, query: { usage: 'valueGenerator' } },
+      });
+      if (error) throw error;
+      return (data ?? []) as CustomFunction[];
+    },
+    staleTime: 30_000,
+  });
+
+  // Side-load the active function name when displaying a $fn: value in the closed cell.
+  const activeFn = useQuery({
+    enabled: isFn && Boolean(wsId && fnId),
+    queryKey: ['custom-function', wsId, fnId],
+    queryFn: async (): Promise<CustomFunction> => {
+      const { data, error } = await bff.GET('/workspaces/{wsId}/custom-functions/{id}', {
+        params: { path: { wsId: wsId!, id: fnId } },
+      });
+      if (error) throw error;
+      return data!;
+    },
+    staleTime: 60_000,
+  });
 
   const refOptions = useMemo(() => {
     const out: { key: string; field: string; type: SchemaProp['type'] }[] = [];
@@ -51,20 +87,20 @@ export function FakerCell({
   const filteredRefs = lowerFilter
     ? refOptions.filter(
         (r) =>
-          r.key.toLowerCase().includes(lowerFilter) ||
-          r.field.toLowerCase().includes(lowerFilter),
+          r.key.toLowerCase().includes(lowerFilter) || r.field.toLowerCase().includes(lowerFilter),
       )
     : refOptions;
   const filteredGroups = lowerFilter
     ? FAKER_GROUPS.map((g) => ({
         ...g,
         methods: g.methods.filter(
-          (m) =>
-            m.toLowerCase().includes(lowerFilter) ||
-            g.ns.toLowerCase().includes(lowerFilter),
+          (m) => m.toLowerCase().includes(lowerFilter) || g.ns.toLowerCase().includes(lowerFilter),
         ),
       })).filter((g) => g.methods.length > 0)
     : FAKER_GROUPS;
+  const filteredFns = lowerFilter
+    ? (customFunctions.data ?? []).filter((f) => f.name.toLowerCase().includes(lowerFilter))
+    : (customFunctions.data ?? []);
 
   return (
     <div className="relative">
@@ -76,16 +112,22 @@ export function FakerCell({
           invalid ? 'border-destructive' : 'border-input',
         )}
       >
-        {!value && (
-          <span className="italic text-muted-foreground">— pick a method —</span>
-        )}
+        {!value && <span className="italic text-muted-foreground">— pick a method —</span>}
         {value && isRef && (
           <span className="inline-flex items-center gap-1 truncate">
             <Link2 size={10} className="text-brand-violet" />
             <span className={cn('font-mono', invalid && 'text-destructive')}>{refTarget}</span>
           </span>
         )}
-        {value && !isRef && (
+        {value && isFn && (
+          <span className="inline-flex items-center gap-1 truncate">
+            <Code2 size={10} className="text-brand-emerald" />
+            <span className={cn('font-mono', invalid && 'text-destructive')}>
+              {activeFn.data?.name ?? fnId}
+            </span>
+          </span>
+        )}
+        {value && !isRef && !isFn && (
           <span className="inline-flex items-center gap-0.5 truncate font-mono">
             <span className="text-muted-foreground">{ns}</span>
             <span className="text-muted-foreground">.</span>
@@ -115,6 +157,30 @@ export function FakerCell({
               </div>
             </div>
             <div className="max-h-[320px] overflow-y-auto">
+              {filteredFns.length > 0 && (
+                <>
+                  <div className="px-2 pt-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Custom functions
+                  </div>
+                  {filteredFns.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => {
+                        onChange(`${FN_PREFIX}${f.id}`);
+                        onToggle();
+                      }}
+                      className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11.5px] hover:bg-accent"
+                    >
+                      <Code2 size={11} className="text-brand-emerald" />
+                      <span className="font-mono">{f.name}</span>
+                      <span className="ml-auto rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {f.usage}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
               {filteredRefs.length > 0 && (
                 <>
                   <div className="px-2 pt-2 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -173,11 +239,13 @@ export function FakerCell({
                   ))}
                 </>
               )}
-              {filteredRefs.length === 0 && filteredGroups.length === 0 && (
-                <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
-                  No matches
-                </div>
-              )}
+              {filteredRefs.length === 0 &&
+                filteredGroups.length === 0 &&
+                filteredFns.length === 0 && (
+                  <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
+                    No matches
+                  </div>
+                )}
             </div>
           </div>
         </>

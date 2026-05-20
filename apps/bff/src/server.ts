@@ -9,6 +9,7 @@ import { registerMeRoute } from './routes/me.js';
 import { registerWorkspaceProxyRoutes } from './routes/workspaces.js';
 import { registerSchemaProxyRoutes } from './routes/schemas.js';
 import { registerSetProxyRoutes } from './routes/sets.js';
+import { registerCustomFunctionProxyRoutes } from './routes/custom-functions.js';
 import { registerWsRoute } from './routes/ws.js';
 
 export type Server = Awaited<ReturnType<typeof buildServer>>;
@@ -44,6 +45,7 @@ export async function buildServer() {
   registerWorkspaceProxyRoutes(app);
   registerSchemaProxyRoutes(app);
   registerSetProxyRoutes(app);
+  registerCustomFunctionProxyRoutes(app);
   registerWsRoute(app);
 
   return app;

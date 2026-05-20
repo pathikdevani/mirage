@@ -104,6 +104,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@mirage/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@mirage/types':
         specifier: workspace:*
         version: link:../../packages/types

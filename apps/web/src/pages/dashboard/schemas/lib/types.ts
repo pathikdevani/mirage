@@ -6,14 +6,7 @@ export type CreateSchemaBody = Api.components['schemas']['CreateSchemaBody'];
 
 export type BrandColor = Schema['color'];
 
-export const BRAND_COLORS: BrandColor[] = [
-  'violet',
-  'cyan',
-  'emerald',
-  'amber',
-  'rose',
-  'slate',
-];
+export const BRAND_COLORS: BrandColor[] = ['violet', 'cyan', 'emerald', 'amber', 'rose', 'slate'];
 
 export const ICON_NAMES = [
   'home',
@@ -32,12 +25,21 @@ export const ICON_NAMES = [
 export type IconName = (typeof ICON_NAMES)[number];
 
 export const FAKER_GROUPS: ReadonlyArray<{ ns: string; methods: readonly string[] }> = [
-  { ns: 'person', methods: ['firstName', 'lastName', 'fullName', 'sex', 'jobTitle', 'middleName', 'bio'] },
-  { ns: 'internet', methods: ['email', 'url', 'ipv4', 'userAgent', 'mac', 'domainName', 'username'] },
+  {
+    ns: 'person',
+    methods: ['firstName', 'lastName', 'fullName', 'sex', 'jobTitle', 'middleName', 'bio'],
+  },
+  {
+    ns: 'internet',
+    methods: ['email', 'url', 'ipv4', 'userAgent', 'mac', 'domainName', 'username'],
+  },
   { ns: 'string', methods: ['uuid', 'numeric', 'alpha', 'alphanumeric', 'nanoid', 'hexadecimal'] },
   { ns: 'phone', methods: ['number', 'imei'] },
   { ns: 'date', methods: ['past', 'future', 'birthdate', 'recent', 'soon', 'between'] },
-  { ns: 'location', methods: ['city', 'country', 'streetAddress', 'zipCode', 'latitude', 'longitude'] },
+  {
+    ns: 'location',
+    methods: ['city', 'country', 'streetAddress', 'zipCode', 'latitude', 'longitude'],
+  },
   { ns: 'helpers', methods: ['arrayElement', 'slugify', 'replaceSymbols', 'fromRegExp'] },
   { ns: 'finance', methods: ['accountNumber', 'iban', 'currency', 'amount', 'creditCardNumber'] },
   { ns: 'datatype', methods: ['boolean', 'json'] },
@@ -74,3 +76,4 @@ export const TYPE_OPTIONS: ReadonlyArray<{
 export const PROP_NAME_RE = /^[a-zA-Z_$][a-zA-Z0-9_$]{0,63}$/;
 export const KEY_RE = /^[a-z][a-z0-9-]{0,39}$/;
 export const REF_PREFIX = '$ref:';
+export const FN_PREFIX = '$fn:';

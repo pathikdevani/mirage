@@ -5,6 +5,7 @@ import { connectDb, makeMembershipResolver, type MirageDb } from './db.js';
 import { registerWorkspaceRoutes } from './routes/workspaces.js';
 import { registerSchemaRoutes } from './routes/schemas.js';
 import { registerSetRoutes } from './routes/sets.js';
+import { registerCustomFunctionRoutes } from './routes/custom-functions.js';
 
 export async function buildServer(db?: MirageDb) {
   const app = Fastify({
@@ -27,6 +28,7 @@ export async function buildServer(db?: MirageDb) {
   registerWorkspaceRoutes(app, database);
   registerSchemaRoutes(app, database);
   registerSetRoutes(app, database);
+  registerCustomFunctionRoutes(app, database);
 
   app.addHook('onClose', async () => {
     await database.client.close();

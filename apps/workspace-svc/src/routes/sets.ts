@@ -22,6 +22,55 @@ interface IdParams {
   id: string;
 }
 
+async function validateStrategyFunctions(
+  db: MirageDb,
+  wsId: string,
+  strategies: Array<{
+    schemaKey: string;
+    fieldPath: string;
+    strategy: { type: string; functionId?: string };
+  }>,
+): Promise<{ code: string; message: string; detail?: unknown } | null> {
+  const ids = Array.from(
+    new Set(
+      strategies
+        .filter((o) => o.strategy.type === 'custom' && typeof o.strategy.functionId === 'string')
+        .map((o) => o.strategy.functionId!),
+    ),
+  );
+  if (ids.length === 0) return null;
+  const fns = await db.customFunctions
+    .find({ workspaceId: wsId, id: { $in: ids } }, { projection: { _id: 0 } })
+    .toArray();
+  const byId = new Map(fns.map((f) => [f.id, f]));
+  for (const ov of strategies) {
+    if (ov.strategy.type !== 'custom') continue;
+    const fnId = ov.strategy.functionId;
+    if (!fnId) continue;
+    const fn = byId.get(fnId);
+    if (!fn) {
+      return {
+        code: 'fn_target_missing',
+        message: `Function not found: ${fnId}`,
+        detail: { schemaKey: ov.schemaKey, fieldPath: ov.fieldPath, functionId: fnId },
+      };
+    }
+    if (fn.usage === 'valueGenerator') {
+      return {
+        code: 'fn_usage_mismatch',
+        message: `Function ${fn.name} is a Value Generator and cannot be a Strategy`,
+        detail: {
+          schemaKey: ov.schemaKey,
+          fieldPath: ov.fieldPath,
+          functionId: fnId,
+          functionUsage: fn.usage,
+        },
+      };
+    }
+  }
+  return null;
+}
+
 export function registerSetRoutes(app: FastifyInstance, db: MirageDb): void {
   const resolveWorkspace = async (request: FastifyRequest, reply: FastifyReply, wsId: string) => {
     const auth = request.auth;
@@ -116,6 +165,13 @@ export function registerSetRoutes(app: FastifyInstance, db: MirageDb): void {
 
       const cleanedStrategies = pruneOrphanOverrides(normalized.strategies, incCheck.edges);
 
+      const fnErr = await validateStrategyFunctions(db, request.params.wsId, cleanedStrategies);
+      if (fnErr) {
+        return reply
+          .code(400)
+          .send({ error: fnErr.message, code: fnErr.code, detail: fnErr.detail });
+      }
+
       const now = new Date().toISOString();
       const doc: Set = {
         id: `set_${nanoid(16)}`,
@@ -195,6 +251,13 @@ export function registerSetRoutes(app: FastifyInstance, db: MirageDb): void {
           .send({ error: incCheck.message, code: incCheck.code, detail: incCheck.detail });
       }
       const cleanedStrategies = pruneOrphanOverrides(normalized.strategies, incCheck.edges);
+
+      const fnErr = await validateStrategyFunctions(db, request.params.wsId, cleanedStrategies);
+      if (fnErr) {
+        return reply
+          .code(400)
+          .send({ error: fnErr.message, code: fnErr.code, detail: fnErr.detail });
+      }
 
       const now = new Date().toISOString();
       const updated: Set = {

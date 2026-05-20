@@ -71,6 +71,26 @@ function validateProps(properties: SchemaProp[]): ValidationError | null {
   return null;
 }
 
+const FN_PREFIX_RE = /^\$fn:(cfn_[A-Za-z0-9_-]{16})$/;
+
+/** Walk every faker `$fn:` in the tree and return [{ functionId, fromPath }]. */
+function collectFnRefs(properties: SchemaProp[]): { functionId: string; fromPath: string }[] {
+  const out: { functionId: string; fromPath: string }[] = [];
+  const walk = (props: SchemaProp[], path: string): void => {
+    for (const p of props) {
+      const nextPath = path ? `${path}.${p.name}` : p.name;
+      if (typeof p.faker === 'string') {
+        const m = p.faker.match(FN_PREFIX_RE);
+        if (m) out.push({ functionId: m[1]!, fromPath: nextPath });
+      }
+      if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields, nextPath);
+      else if (p.type === 'array' && p.items) walk([p.items], `${nextPath}[]`);
+    }
+  };
+  walk(properties, '');
+  return out;
+}
+
 /** Walk every faker `$ref:` in the tree and return [{ targetKey, fromPath }]. */
 function collectRefs(
   properties: SchemaProp[],
@@ -328,6 +348,39 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
         }
       }
 
+      // Validate $fn references — target must exist with usage ∈ {valueGenerator, both}
+      const fnRefs = collectFnRefs(normalized.properties);
+      if (fnRefs.length > 0) {
+        const ids = Array.from(new Set(fnRefs.map((r) => r.functionId)));
+        const fns = await db.customFunctions
+          .find(
+            { workspaceId: request.params.wsId, id: { $in: ids } },
+            { projection: { _id: 0 } },
+          )
+          .toArray();
+        const byId = new Map(fns.map((f) => [f.id, f]));
+        for (const r of fnRefs) {
+          const fn = byId.get(r.functionId);
+          if (!fn) {
+            return reply.code(400).send(
+              err('fn_target_missing', `Function not found: ${r.functionId}`, {
+                path: r.fromPath,
+                functionId: r.functionId,
+              }),
+            );
+          }
+          if (fn.usage === 'strategy') {
+            return reply.code(400).send(
+              err(
+                'fn_usage_mismatch',
+                `Function ${fn.name} is a Strategy function and cannot be a Value Generator`,
+                { path: r.fromPath, functionId: r.functionId, functionUsage: fn.usage },
+              ),
+            );
+          }
+        }
+      }
+
       // Build cross-schema ref graph for cycle detection.
       const existingForCycle = allInWs.map((s) => ({
         key: s.key,
@@ -429,6 +482,39 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
               targetField: r.targetField,
             }),
           );
+        }
+      }
+
+      // Validate $fn references — target must exist with usage ∈ {valueGenerator, both}
+      const fnRefs = collectFnRefs(normalized.properties);
+      if (fnRefs.length > 0) {
+        const ids = Array.from(new Set(fnRefs.map((r) => r.functionId)));
+        const fns = await db.customFunctions
+          .find(
+            { workspaceId: request.params.wsId, id: { $in: ids } },
+            { projection: { _id: 0 } },
+          )
+          .toArray();
+        const byId = new Map(fns.map((f) => [f.id, f]));
+        for (const r of fnRefs) {
+          const fn = byId.get(r.functionId);
+          if (!fn) {
+            return reply.code(400).send(
+              err('fn_target_missing', `Function not found: ${r.functionId}`, {
+                path: r.fromPath,
+                functionId: r.functionId,
+              }),
+            );
+          }
+          if (fn.usage === 'strategy') {
+            return reply.code(400).send(
+              err(
+                'fn_usage_mismatch',
+                `Function ${fn.name} is a Strategy function and cannot be a Value Generator`,
+                { path: r.fromPath, functionId: r.functionId, functionUsage: fn.usage },
+              ),
+            );
+          }
         }
       }
 

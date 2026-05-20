@@ -116,7 +116,9 @@ export function PropertyEditorRow({
           value={currentValue}
           onChange={(e) => {
             const [t, f] = e.target.value.split('|');
-            updateRow((r) => applyTypeChange(r, t as SchemaProp['type'], f as SchemaProp['format']));
+            updateRow((r) =>
+              applyTypeChange(r, t as SchemaProp['type'], f as SchemaProp['format']),
+            );
           }}
           className="h-7 rounded-md border border-input bg-background px-2 text-[12px] outline-none focus:border-ring focus:ring-[2px] focus:ring-ring/10"
         >
@@ -213,9 +215,7 @@ export function applyTypeChange(
     next.fields = r.type === 'object' && Array.isArray(r.fields) ? r.fields : [];
   } else if (type === 'array') {
     next.items =
-      r.type === 'array' && r.items
-        ? r.items
-        : { name: '', type: 'string', required: false };
+      r.type === 'array' && r.items ? r.items : { name: '', type: 'string', required: false };
   } else if (r.faker) {
     next.faker = r.faker;
   }

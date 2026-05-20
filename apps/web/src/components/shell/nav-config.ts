@@ -1,11 +1,12 @@
 import {
+  BookOpen,
+  Box,
+  Code2,
   Database,
+  Download,
+  History,
   Network,
   Play,
-  History,
-  Download,
-  Box,
-  BookOpen,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ export const NAV: NavSection[] = [
     items: [
       { label: 'Schemas', path: 'schemas', icon: Database },
       { label: 'Sets', path: 'sets', icon: Box },
+      { label: 'Functions', path: 'functions', icon: Code2 },
       { label: 'Dependency graph', path: 'graph', icon: Network },
       { label: 'Generate', path: 'generate', icon: Play },
     ],

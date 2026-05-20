@@ -8,6 +8,7 @@ import type { SetBuffer } from './useSetBuffer.js';
 import type { Api } from '@mirage/types';
 
 type SetEdge = Api.components['schemas']['SetEdge'];
+type CustomFunction = Api.components['schemas']['CustomFunction'];
 
 interface StrategiesTabProps {
   wsId: string;
@@ -18,7 +19,7 @@ interface StrategiesTabProps {
 }
 
 const STRATEGY_META: Record<
-  (typeof STRATEGY_TYPES)[number],
+  '1:1' | 'random' | 'evenSplit' | 'custom',
   { label: string; desc: string; icon: typeof Link2 }
 > = {
   '1:1': {
@@ -36,6 +37,11 @@ const STRATEGY_META: Record<
     desc: 'Distribute target rows evenly across sources.',
     icon: Sliders,
   },
+  custom: {
+    label: 'Custom function',
+    desc: 'Run a user-written function from this workspace.',
+    icon: Sliders,
+  },
 };
 
 export function StrategiesTab({ wsId, setId, buffer, error, onClearError }: StrategiesTabProps) {
@@ -51,6 +57,20 @@ export function StrategiesTab({ wsId, setId, buffer, error, onClearError }: Stra
     staleTime: 10_000,
   });
   const edges = edgesQuery.data ?? [];
+
+  const fnsQuery = useQuery({
+    queryKey: ['custom-functions', wsId, 'usage=strategy'],
+    queryFn: async (): Promise<CustomFunction[]> => {
+      const { data, error: e } = await bff.GET('/workspaces/{wsId}/custom-functions', {
+        params: { path: { wsId }, query: { usage: 'strategy' } },
+      });
+      if (e) throw e;
+      return (data ?? []) as CustomFunction[];
+    },
+    staleTime: 30_000,
+  });
+  const strategyFns = fnsQuery.data ?? [];
+
   const [activeIdx, setActiveIdx] = useState(0);
   const activeEdge = edges[activeIdx];
 
@@ -192,19 +212,61 @@ export function StrategiesTab({ wsId, setId, buffer, error, onClearError }: Stra
                 </button>
               );
             })}
-            <div
-              className="flex items-start gap-2 rounded-lg border border-dashed border-input p-3 text-left opacity-60"
-              title="Requires Custom Functions — coming soon"
+            <button
+              type="button"
+              onClick={() => {
+                const first = strategyFns[0];
+                if (first) setStrategy({ type: 'custom', functionId: first.id });
+                else setStrategy({ type: 'custom', functionId: '' });
+              }}
+              className={cn(
+                'flex items-start gap-2 rounded-lg border bg-background p-3 text-left',
+                currentStrategy.type === 'custom'
+                  ? 'border-foreground'
+                  : 'border-input hover:bg-accent/40',
+                strategyFns.length === 0 && 'opacity-60',
+              )}
             >
               <Sliders size={14} className="mt-0.5 flex-none" />
               <div>
                 <div className="text-[12.5px] font-semibold text-foreground">Custom function</div>
                 <div className="text-[11.5px] text-muted-foreground">
-                  Requires Custom Functions — coming soon.
+                  {strategyFns.length === 0
+                    ? 'No strategy functions yet — create one on the Functions page.'
+                    : 'Pick one of your workspace functions.'}
                 </div>
               </div>
-            </div>
+            </button>
           </div>
+
+          {currentStrategy.type === 'custom' && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              <label className="text-[11.5px] font-medium uppercase tracking-wide text-muted-foreground">
+                Function
+              </label>
+              <select
+                className="h-9 w-full rounded-md border border-input bg-background px-3 font-mono text-[13px] text-foreground"
+                value={currentStrategy.functionId}
+                onChange={(e) => setStrategy({ type: 'custom', functionId: e.target.value })}
+              >
+                {strategyFns.length === 0 ? (
+                  <option value="">No strategy functions available</option>
+                ) : (
+                  strategyFns.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.usage})
+                    </option>
+                  ))
+                )}
+              </select>
+              {strategyFns.length === 0 && (
+                <span className="text-[11.5px] text-muted-foreground">
+                  Create a function with usage &ldquo;Strategy&rdquo; or &ldquo;Both&rdquo; on the
+                  Functions page first.
+                </span>
+              )}
+            </div>
+          )}
 
           {currentStrategy.type === 'random' && activeEdge?.cardinality === 'many' && (
             <label className="mt-2 inline-flex items-center gap-2 text-[12.5px] text-foreground">
