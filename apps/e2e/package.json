@@ -1,0 +1,45 @@
+{
+  "name": "@mirage/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1050.0",
+    "@aws-sdk/lib-storage": "^3.1050.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "vitest": "^2.1.8"
+  },
+  "nx": {
+    "name": "@mirage/e2e",
+    "targets": {
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run",
+          "cwd": "apps/e2e"
+        }
+      },
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsc -p tsconfig.json --noEmit",
+          "cwd": "apps/e2e"
+        }
+      },
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint src",
+          "cwd": "apps/e2e"
+        }
+      }
+    }
+  }
+}

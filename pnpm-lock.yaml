@@ -55,6 +55,25 @@ importers:
         specifier: ^4.19.2
         version: 4.22.3
 
+  apps/e2e:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1050.0
+        version: 3.1050.0
+      '@aws-sdk/lib-storage':
+        specifier: ^3.1050.0
+        version: 3.1050.0(@aws-sdk/client-s3@3.1050.0)
+      ws:
+        specifier: ^8.18.0
+        version: 8.20.1
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@24.12.4)(lightningcss@1.32.0)
+
   apps/export-svc:
     dependencies:
       '@aws-sdk/client-s3':
@@ -1503,6 +1522,9 @@ packages:
 
   '@types/whatwg-url@11.0.5':
     resolution: {integrity: sha512-coYR071JRaHa+xoEvvYqvnIHaVqaYrLPbsufM9BF63HkwI5Lgmy2QR8Q5K/lYDYo5AK82wOvSOS0UsLTpTG7uQ==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript-eslint/eslint-plugin@8.59.4':
     resolution: {integrity: sha512-PegsU+XfyJJNjd4+u/k6f9yTyp0lEXXiPopUNobZcIAUJFGICFLN+sP0Rb3JehVmiij1Ph0dFGYqODoRo/2+6A==}
@@ -4289,6 +4311,10 @@ snapshots:
   '@types/whatwg-url@11.0.5':
     dependencies:
       '@types/webidl-conversions': 7.0.3
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 24.12.4
 
   '@typescript-eslint/eslint-plugin@8.59.4(@typescript-eslint/parser@8.59.4(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)':
     dependencies:

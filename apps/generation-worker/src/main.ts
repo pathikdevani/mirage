@@ -6,6 +6,7 @@ import { makeRunProcessor } from './processor.js';
 import { PREVIEWS_QUEUE, RUNS_QUEUE, type RunJobData } from './queues.js';
 import { connectDb } from './db.js';
 import { shutdownSandbox } from './sandbox-singleton.js';
+import { recoverOrphanedRuns } from './recover-orphans.js';
 
 const logger = pino({ level: env.logLevel });
 
@@ -24,6 +25,22 @@ async function main(): Promise<void> {
   const cancelRedis = new IORedis(env.redisUrl);
 
   const db = await connectDb();
+
+  // Recover any runs left at status='running' by a previous worker process
+  // that died mid-execution (tsx watch restart, crash, SIGKILL). Must run
+  // BEFORE the workers start consuming, so we don't accidentally fail a run
+  // that another live worker is currently processing.
+  try {
+    await recoverOrphanedRuns({
+      db,
+      publisher,
+      cancelRedis,
+      bullConnection: runsConnection,
+      logger,
+    });
+  } catch (err) {
+    logger.warn({ err }, 'orphan recovery failed; continuing startup');
+  }
 
   const processor = makeRunProcessor({ publisher, cancelRedis, db, logger });
 

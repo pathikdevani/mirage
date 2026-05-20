@@ -145,6 +145,10 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
       customFunctions,
       sandbox,
     })) {
+      // Per-row cancel check — propagates aborts within one row of generation
+      // instead of waiting for a full batch (which can be tens of seconds for
+      // schemas with custom-function fields).
+      if (signal?.aborted) throw new CancelledError();
       const sourceIndex = schemaProduced + buffer.length;
       for (const e of outgoing) {
         const resolver = resolvers.get(edgeKey(e))!;
