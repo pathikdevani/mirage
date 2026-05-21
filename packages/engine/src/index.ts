@@ -11,6 +11,7 @@ export * from './cycle.js';
 export * from './custom-function-registry.js';
 export * from './resolve-schema.js';
 export * from './apply-strategy.js';
+export * from './classify-ref-edges.js';
 export * from './extract-set-edges.js';
 export * from './extract-fn-refs.js';
 export * from './rng.js';

@@ -77,12 +77,18 @@ export function makeServerErrorHandler(handlers: ServerErrorHandlers): (err: Ser
       return;
     }
     if (code === 'cycle_detected') {
-      const cycle = (err.detail as { cycle?: string[] } | undefined)?.cycle;
-      handlers.setCycleBanner?.(
-        cycle?.length
-          ? `Cycle detected: ${cycle.join(' → ')}`
-          : 'A reference cycle was detected.',
-      );
+      const detail = err.detail as
+        | { cycle?: string[]; kind?: 'embedding' | 'field_deadlock' }
+        | undefined;
+      const cycle = detail?.cycle;
+      const path = cycle?.length ? `: ${cycle.join(' → ')}` : '';
+      const message =
+        detail?.kind === 'field_deadlock'
+          ? `Field projections deadlock${path}`
+          : detail?.kind === 'embedding'
+            ? `Reference would embed an entire row${path}`
+            : `A reference cycle was detected${path}`;
+      handlers.setCycleBanner?.(message);
       handlers.setStep?.(2);
       return;
     }

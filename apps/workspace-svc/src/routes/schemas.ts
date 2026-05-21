@@ -3,6 +3,8 @@ import type { ClientSession } from 'mongodb';
 import { nanoid } from 'nanoid';
 import { asId, type Api, type WorkspaceId } from '@mirage/types';
 import {
+  buildFakerIndex,
+  classifyRefEdge,
   customFunctionRegistryFromMap,
   dryRunSchema,
   type CustomFunctionEntry,
@@ -139,89 +141,116 @@ function rewriteRefsInTree(props: SchemaProp[], oldKey: string, newKey: string):
   return changed;
 }
 
-function detectCycleInGraph(graph: { key: string; refs: string[] }[]): string[] | null {
-  const adj = new Map<string, Set<string>>();
-  for (const s of graph) adj.set(s.key, new Set(s.refs));
-  const WHITE = 0,
-    GRAY = 1,
-    BLACK = 2;
-  const color = new Map<string, number>();
-  const stack: string[] = [];
-  let result: string[] | null = null;
-  const dfs = (node: string): boolean => {
-    color.set(node, GRAY);
-    stack.push(node);
-    const out = adj.get(node);
-    if (out) {
-      for (const next of out) {
-        if (!adj.has(next)) continue;
-        const c = color.get(next) ?? WHITE;
-        if (c === GRAY) {
-          const i = stack.indexOf(next);
-          result = i >= 0 ? [...stack.slice(i), next] : [next];
-          return true;
-        }
-        if (c === WHITE && dfs(next)) return true;
-      }
-    }
-    stack.pop();
-    color.set(node, BLACK);
-    return false;
-  };
-  for (const k of adj.keys()) {
-    if ((color.get(k) ?? WHITE) === WHITE && dfs(k)) return result;
-  }
-  return null;
-}
-
 function isReplicaSetUnsupported(e: unknown): boolean {
   return e instanceof Error && /replica set|Transaction numbers/i.test(e.message);
 }
 
-/** Topological cycle check across schemas (cross-schema only). */
-function findCycle(
-  newKey: string,
-  newRefs: string[],
-  existing: { key: string; refs: string[] }[],
-): string[] | null {
-  const adj = new Map<string, Set<string>>();
-  for (const s of existing) adj.set(s.key, new Set(s.refs));
-  adj.set(newKey, new Set(newRefs));
+interface SchemaForCycle {
+  key: string;
+  properties: SchemaProp[];
+}
 
-  const WHITE = 0,
-    GRAY = 1,
-    BLACK = 2;
-  const color = new Map<string, number>();
-  const stack: string[] = [];
-  let cyclePath: string[] | null = null;
+interface HardCycleHit {
+  cycle: string[];
+  kind: 'embedding' | 'field_deadlock';
+}
 
-  const dfs = (node: string): boolean => {
-    color.set(node, GRAY);
-    stack.push(node);
-    const out = adj.get(node);
-    if (out) {
-      for (const next of out) {
-        if (!adj.has(next)) continue; // ref to non-existent schema — caught elsewhere
-        const c = color.get(next) ?? WHITE;
-        if (c === GRAY) {
-          const startIdx = stack.indexOf(next);
-          cyclePath = startIdx >= 0 ? [...stack.slice(startIdx), next] : [next];
-          return true;
-        }
-        if (c === WHITE && dfs(next)) return true;
+/**
+ * Build the hard-edge graph across a corpus of schemas (via `classifyRefEdge`)
+ * and return the first cycle found, or `null`. Soft edges (scalar projections
+ * to primitive fields) are ignored — cross-schema id pointers are allowed.
+ */
+function findHardCycle(corpus: ReadonlyArray<SchemaForCycle>): HardCycleHit | null {
+  const fakerIndex = buildFakerIndex(
+    corpus as unknown as Parameters<typeof buildFakerIndex>[0],
+  );
+
+  const adj = new Map<
+    string,
+    Array<{ to: string; kind: 'embedding' | 'field_deadlock' }>
+  >();
+  for (const s of corpus) adj.set(s.key, []);
+
+  for (const s of corpus) {
+    const refs = collectRefsAny(s.properties);
+    for (const r of refs) {
+      const cls = classifyRefEdge(
+        {
+          fromSchemaKey: s.key,
+          fromFieldPath: r.fromPath,
+          targetKey: r.targetKey,
+          targetField: r.targetField,
+        },
+        fakerIndex,
+      );
+      if (cls.hard) {
+        adj.get(s.key)!.push({ to: r.targetKey, kind: cls.kind });
+      }
+    }
+  }
+
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const colour = new Map<string, number>();
+  const stack: Array<{ key: string; incomingKind: 'embedding' | 'field_deadlock' | null }> = [];
+  let result: HardCycleHit | null = null;
+
+  const dfs = (k: string): boolean => {
+    colour.set(k, GRAY);
+    stack.push({ key: k, incomingKind: null });
+    for (const e of adj.get(k) ?? []) {
+      if (!adj.has(e.to)) continue;
+      const c = colour.get(e.to) ?? WHITE;
+      if (c === GRAY) {
+        const startIdx = stack.findIndex((f) => f.key === e.to);
+        const slice = startIdx >= 0 ? stack.slice(startIdx) : [{ key: e.to, incomingKind: null }];
+        const kinds: Array<'embedding' | 'field_deadlock' | null> = [
+          ...slice.slice(1).map((f) => f.incomingKind),
+          e.kind,
+        ];
+        const kind: 'embedding' | 'field_deadlock' = kinds.includes('embedding')
+          ? 'embedding'
+          : 'field_deadlock';
+        result = { cycle: [...slice.map((f) => f.key), e.to], kind };
+        return true;
+      }
+      if (c === WHITE) {
+        stack[stack.length - 1] = { key: k, incomingKind: e.kind };
+        if (dfs(e.to)) return true;
       }
     }
     stack.pop();
-    color.set(node, BLACK);
+    colour.set(k, BLACK);
     return false;
   };
 
   for (const k of adj.keys()) {
-    if ((color.get(k) ?? WHITE) === WHITE) {
-      if (dfs(k)) return cyclePath;
+    if ((colour.get(k) ?? WHITE) === WHITE) {
+      if (dfs(k)) return result;
     }
   }
   return null;
+}
+
+const REF_ANY_RE = /^\$ref:([a-z][a-z0-9-]{0,39})(?:\.([a-zA-Z_$][a-zA-Z0-9_$.]{0,128}))?$/;
+
+/** Like `collectRefs` but returns `targetField` as `undefined` when no `.field` is present. */
+function collectRefsAny(
+  properties: SchemaProp[],
+): { targetKey: string; targetField: string | undefined; fromPath: string }[] {
+  const out: { targetKey: string; targetField: string | undefined; fromPath: string }[] = [];
+  const walk = (props: SchemaProp[], path: string): void => {
+    for (const p of props) {
+      const next = path ? `${path}.${p.name}` : p.name;
+      if (typeof p.faker === 'string') {
+        const m = p.faker.match(REF_ANY_RE);
+        if (m) out.push({ targetKey: m[1]!, targetField: m[2], fromPath: next });
+      }
+      if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields, next);
+      else if (p.type === 'array' && p.items) walk([p.items], `${next}[]`);
+    }
+  };
+  walk(properties, '');
+  return out;
 }
 
 interface NormalizedBody {
@@ -475,19 +504,23 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
         }
       }
 
-      // Build cross-schema ref graph for cycle detection.
-      const existingForCycle = allInWs.map((s) => ({
-        key: s.key,
-        refs: Array.from(
-          new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey)),
-        ),
-      }));
-      const newRefs = Array.from(new Set(refs.map((r) => r.targetKey)));
-      const cycle = findCycle(normalized.key, newRefs, existingForCycle);
-      if (cycle) {
+      // Hard-cycle detection (soft cycles — scalar id cross-pointers — are allowed).
+      const corpus: SchemaForCycle[] = [
+        ...allInWs
+          .filter((s) => s.key !== normalized.key)
+          .map((s) => ({ key: s.key, properties: s.properties as SchemaProp[] })),
+        { key: normalized.key, properties: normalized.properties },
+      ];
+      const cycleHit = findHardCycle(corpus);
+      if (cycleHit) {
         return reply
           .code(400)
-          .send(err('cycle_detected', 'Reference graph contains a cycle', { cycle }));
+          .send(
+            err('cycle_detected', 'Reference graph contains a cycle', {
+              cycle: cycleHit.cycle,
+              kind: cycleHit.kind,
+            }),
+          );
       }
 
       const now = new Date().toISOString();
@@ -613,18 +646,20 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
       }
 
       const otherSchemas = allInWs.filter((s) => s.id !== existing.id);
-      const existingForCycle = otherSchemas.map((s) => ({
-        key: s.key,
-        refs: Array.from(
-          new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey)),
-        ),
-      }));
-      const newRefs = Array.from(new Set(refs.map((r) => r.targetKey)));
-      const cycle = findCycle(normalized.key, newRefs, existingForCycle);
-      if (cycle) {
+      const corpus: SchemaForCycle[] = [
+        ...otherSchemas.map((s) => ({ key: s.key, properties: s.properties as SchemaProp[] })),
+        { key: normalized.key, properties: normalized.properties },
+      ];
+      const cycleHit = findHardCycle(corpus);
+      if (cycleHit) {
         return reply
           .code(400)
-          .send(err('cycle_detected', 'Reference graph contains a cycle', { cycle }));
+          .send(
+            err('cycle_detected', 'Reference graph contains a cycle', {
+              cycle: cycleHit.cycle,
+              kind: cycleHit.kind,
+            }),
+          );
       }
 
       const keyChanged = normalized.key !== existing.key;
@@ -713,20 +748,17 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
             }
           }
 
-          // 3. Re-run cycle detection against the post-rename state.
+          // 3. Re-run hard-cycle detection against the post-rename state.
           const after = await db.schemas
             .find({ workspaceId: request.params.wsId }, { projection: { _id: 0 }, ...sessionOpt })
             .toArray();
-          const graph = after.map((s) => ({
-            key: s.key,
-            refs: Array.from(
-              new Set(collectRefs(s.properties as SchemaProp[]).map((r) => r.targetKey)),
-            ),
-          }));
-          const cycleAfter = detectCycleInGraph(graph);
+          const cycleAfter = findHardCycle(
+            after.map((s) => ({ key: s.key, properties: s.properties as SchemaProp[] })),
+          );
           if (cycleAfter) {
             state.error = err('key_rewrite_failed', 'Renaming this key would introduce a cycle', {
-              cycle: cycleAfter,
+              cycle: cycleAfter.cycle,
+              kind: cycleAfter.kind,
             });
             if (session) await session.abortTransaction();
             return;

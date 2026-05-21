@@ -13,6 +13,7 @@ const edge = (overrides: Partial<SetEdge> = {}): SetEdge => ({
   fromFieldPath: 'targetRef',
   toSchemaKey: 'tgt',
   cardinality: 'one',
+  hard: false,
   ...overrides,
 });
 

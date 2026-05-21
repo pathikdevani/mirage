@@ -135,6 +135,52 @@ describe('runSetStream — cross-schema refs', () => {
   });
 });
 
+describe('runSetStream — soft cycles', () => {
+  it('generates Phone and Person with cross-pointing UUIDs', async () => {
+    const schemas = [
+      schema('phone', [
+        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'person_id', type: 'string', faker: '$ref:person.id', required: false },
+      ]),
+      schema('person', [
+        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'phone_id', type: 'string', faker: '$ref:phone.id', required: false },
+      ]),
+    ];
+    const set = buildSet([
+      { schemaKey: 'phone', count: 3 },
+      { schemaKey: 'person', count: 3 },
+    ]);
+
+    const rowsByKey = new Map<string, unknown[]>();
+    for await (const b of runSetStream({
+      set,
+      schemas,
+      customFunctions: customFunctionRegistryFromMap(new Map()),
+      sandbox: fakeSandbox,
+      batchSize: 10,
+    })) {
+      const acc = rowsByKey.get(b.schemaKey) ?? [];
+      acc.push(...b.rows);
+      rowsByKey.set(b.schemaKey, acc);
+    }
+
+    const phoneRows = rowsByKey.get('phone') as Array<{ id: string; person_id: string }>;
+    const personRows = rowsByKey.get('person') as Array<{ id: string; phone_id: string }>;
+    expect(phoneRows).toHaveLength(3);
+    expect(personRows).toHaveLength(3);
+
+    const personIds = new Set(personRows.map((r) => r.id));
+    const phoneIds = new Set(phoneRows.map((r) => r.id));
+    for (const r of phoneRows) {
+      expect(personIds.has(r.person_id)).toBe(true);
+    }
+    for (const r of personRows) {
+      expect(phoneIds.has(r.phone_id)).toBe(true);
+    }
+  });
+});
+
 describe('runSetStream — cancellation', () => {
   it('throws CancelledError when signal is aborted between batches', async () => {
     const schemas = [

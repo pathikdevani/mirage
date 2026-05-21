@@ -69,6 +69,39 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
   // schemaKey → fieldPath → values[]
   const projectedColumns = new Map<string, Map<string, unknown[]>>();
 
+  // Seed pass: materialise every member of every soft-cycle group up front,
+  // then push their anchor projections into projectedColumns so peer resolvers
+  // have data to read during the main pass.
+  const seededSchemas = new Set<string>();
+  for (const group of plan.softCycleSeedFields) {
+    for (const member of group) seededSchemas.add(member.schemaKey);
+    for (const member of group) {
+      await materialiseSchema(member.schemaKey, {
+        schemas,
+        countByKey,
+        customFunctions,
+        sandbox,
+        salt: set.salt,
+        locale: set.output.locale,
+        cache: materialisedRows,
+      });
+    }
+    for (const member of group) {
+      const rows = materialisedRows.get(member.schemaKey)!;
+      if (!projectedColumns.has(member.schemaKey)) {
+        projectedColumns.set(member.schemaKey, new Map());
+      }
+      const cols = projectedColumns.get(member.schemaKey)!;
+      for (const fp of member.fieldPaths) {
+        if (!cols.has(fp)) cols.set(fp, []);
+        const arr = cols.get(fp)!;
+        for (const row of rows) {
+          arr.push(getByPath(row as Record<string, unknown>, fp));
+        }
+      }
+    }
+  }
+
   let totalProduced = 0;
   const totalRows = plan.totalRows;
 
@@ -129,22 +162,38 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
     }
 
     // Open per-field projection arrays for this schema, if needed.
+    // For seeded schemas, projectedColumns is already populated from the seed
+    // pass — don't reset it, just merge any additional projection paths.
     const myProjections = projectionsNeeded.get(schemaKey);
+    const isSeeded = seededSchemas.has(schemaKey);
     if (myProjections) {
-      projectedColumns.set(schemaKey, new Map([...myProjections].map((p) => [p, []])));
+      if (!projectedColumns.has(schemaKey)) {
+        projectedColumns.set(schemaKey, new Map());
+      }
+      const existing = projectedColumns.get(schemaKey)!;
+      for (const p of myProjections) {
+        if (!existing.has(p)) existing.set(p, []);
+      }
     }
 
     let schemaProduced = 0;
     let buffer: ResolvedRow[] = [];
 
-    for await (const row of generateRows({
-      schema,
-      count: schemaTotal,
-      salt: set.salt,
-      locale: set.output.locale,
-      customFunctions,
-      sandbox,
-    })) {
+    const rowSource: AsyncIterable<ResolvedRow> = isSeeded
+      ? (async function* () {
+          const cached = materialisedRows.get(schemaKey) ?? [];
+          for (const row of cached) yield row;
+        })()
+      : generateRows({
+          schema,
+          count: schemaTotal,
+          salt: set.salt,
+          locale: set.output.locale,
+          customFunctions,
+          sandbox,
+        });
+
+    for await (const row of rowSource) {
       // Per-row cancel check — propagates aborts within one row of generation
       // instead of waiting for a full batch (which can be tens of seconds for
       // schemas with custom-function fields).
@@ -157,7 +206,7 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
       }
       buffer.push(row);
 
-      if (myProjections) {
+      if (myProjections && !isSeeded) {
         const cols = projectedColumns.get(schemaKey)!;
         for (const fp of myProjections) {
           cols.get(fp)!.push(getByPath(row as Record<string, unknown>, fp));

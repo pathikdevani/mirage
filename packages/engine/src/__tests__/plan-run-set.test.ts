@@ -102,3 +102,59 @@ describe('planRunSet', () => {
     expect(plan.totalRows).toBe(MAX_ROWS_PER_SCHEMA);
   });
 });
+
+describe('planRunSet — soft cycles', () => {
+  it('allows scalar id cross-references (Scenario A) and reports seed fields', () => {
+    const schemas = [
+      schema('phone', [primitive('person_id', '$ref:person.id')]),
+      schema('person', [primitive('phone_id', '$ref:phone.id')]),
+    ];
+    const set = baseSet([
+      { schemaKey: 'phone', count: 5 },
+      { schemaKey: 'person', count: 5 },
+    ]);
+    const plan = planRunSet({ set, schemas });
+    expect(plan.softCycleSeedFields).toHaveLength(1);
+    const group = plan.softCycleSeedFields[0]!;
+    expect(new Set(group.map((g) => g.schemaKey))).toEqual(new Set(['phone', 'person']));
+    expect(group.find((g) => g.schemaKey === 'phone')!.fieldPaths).toContain('id');
+    expect(group.find((g) => g.schemaKey === 'person')!.fieldPaths).toContain('id');
+  });
+
+  it('still throws cycle_in_set when an embedding cycle exists (Scenario B)', () => {
+    const schemas = [
+      schema('phone', [primitive('person', '$ref:person')]),
+      schema('person', [primitive('phone', '$ref:phone')]),
+    ];
+    const set = baseSet([
+      { schemaKey: 'phone', count: 1 },
+      { schemaKey: 'person', count: 1 },
+    ]);
+    try {
+      planRunSet({ set, schemas });
+      throw new Error('expected planRunSet to throw');
+    } catch (err) {
+      expect((err as EngineError).code).toBe('cycle_in_set');
+      const detail = (err as EngineError).detail as { cycles: { kind: string }[] };
+      expect(detail.cycles.some((c) => c.kind === 'embedding')).toBe(true);
+    }
+  });
+
+  it('throws field_deadlock when chains close on themselves (Scenario D)', () => {
+    const schemas = [
+      schema('phone', [primitive('x', '$ref:person.y')]),
+      schema('person', [primitive('y', '$ref:phone.x')]),
+    ];
+    const set = baseSet([
+      { schemaKey: 'phone', count: 1 },
+      { schemaKey: 'person', count: 1 },
+    ]);
+    try {
+      planRunSet({ set, schemas });
+      throw new Error('expected planRunSet to throw');
+    } catch (err) {
+      const detail = (err as EngineError).detail as { cycles: { kind: string }[] };
+      expect(detail.cycles.some((c) => c.kind === 'field_deadlock')).toBe(true);
+    }
+  });
+});
