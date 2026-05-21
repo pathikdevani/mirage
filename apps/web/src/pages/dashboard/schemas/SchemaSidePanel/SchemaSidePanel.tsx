@@ -3,9 +3,10 @@ import { cn } from '@mirage/ui-kit';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { PreviewTabContent } from './PreviewTabContent.js';
 import { EditTabContent } from './EditTabContent.js';
+import { JsonTabContent } from './JsonTabContent.js';
 import { useSchemaDryRun } from './useSchemaDryRun.js';
 
-type Tab = 'preview' | 'edit';
+type Tab = 'preview' | 'edit' | 'json';
 
 export interface SchemaSidePanelProps {
   wsId: string;
@@ -32,9 +33,10 @@ export function SchemaSidePanel({
   const [count, setCount] = useState(1);
 
   // Auto-switch to Edit when a property is selected; back to Preview when cleared.
+  // Don't override the JSON tab — the user explicitly picked it.
   useEffect(() => {
     if (selectedProp) setTab('edit');
-    else setTab('preview');
+    else setTab((prev) => (prev === 'json' ? prev : 'preview'));
   }, [selectedProp]);
 
   const dry = useSchemaDryRun(wsId, draft, count);
@@ -51,6 +53,9 @@ export function SchemaSidePanel({
           onClick={() => selectedProp && setTab('edit')}
         >
           Edit property
+        </TabButton>
+        <TabButton active={tab === 'json'} onClick={() => setTab('json')}>
+          JSON
         </TabButton>
       </div>
 
@@ -76,6 +81,7 @@ export function SchemaSidePanel({
             onBack={onClearSelection}
           />
         )}
+        {tab === 'json' && <JsonTabContent draft={draft} />}
       </div>
     </aside>
   );
