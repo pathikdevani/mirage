@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mirage — Faker args UI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script>
+    // Bridge Tailwind v3 (CDN) → the Mirage v4 token names referenced by the
+    // ported component code. Maps utilities like `bg-background`,
+    // `text-muted-foreground`, `border-input`, `text-brand-violet`, etc., onto
+    // CSS variables defined below.
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            background: 'var(--color-background)',
+            foreground: 'var(--color-foreground)',
+            card: { DEFAULT: 'var(--color-card)', foreground: 'var(--color-card-foreground)' },
+            popover: { DEFAULT: 'var(--color-popover)', foreground: 'var(--color-popover-foreground)' },
+            primary: { DEFAULT: 'var(--color-primary)', foreground: 'var(--color-primary-foreground)' },
+            secondary: { DEFAULT: 'var(--color-secondary)', foreground: 'var(--color-secondary-foreground)' },
+            muted: { DEFAULT: 'var(--color-muted)', foreground: 'var(--color-muted-foreground)' },
+            accent: { DEFAULT: 'var(--color-accent)', foreground: 'var(--color-accent-foreground)' },
+            destructive: { DEFAULT: 'var(--color-destructive)', foreground: 'var(--color-destructive-foreground)' },
+            border: 'var(--color-border)',
+            input: 'var(--color-input)',
+            ring: 'var(--color-ring)',
+            'brand-violet': 'var(--color-brand-violet)',
+            'brand-cyan': 'var(--color-brand-cyan)',
+            'brand-emerald': 'var(--color-brand-emerald)',
+            'brand-amber': 'var(--color-brand-amber)',
+            'brand-rose': 'var(--color-brand-rose)',
+            'brand-slate': 'var(--color-brand-slate)',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    :root {
+      --color-background: oklch(1 0 0);
+      --color-foreground: oklch(0.145 0 0);
+      --color-card: oklch(1 0 0);
+      --color-card-foreground: oklch(0.145 0 0);
+      --color-popover: oklch(1 0 0);
+      --color-popover-foreground: oklch(0.145 0 0);
+      --color-primary: oklch(0.205 0 0);
+      --color-primary-foreground: oklch(0.985 0 0);
+      --color-secondary: oklch(0.97 0 0);
+      --color-secondary-foreground: oklch(0.205 0 0);
+      --color-muted: oklch(0.97 0 0);
+      --color-muted-foreground: oklch(0.556 0 0);
+      --color-accent: oklch(0.97 0 0);
+      --color-accent-foreground: oklch(0.205 0 0);
+      --color-destructive: oklch(0.577 0.245 27.325);
+      --color-destructive-foreground: oklch(0.985 0 0);
+      --color-border: oklch(0.922 0 0);
+      --color-input: oklch(0.922 0 0);
+      --color-ring: oklch(0.708 0 0);
+      --color-brand-violet: hsl(262 83% 58%);
+      --color-brand-cyan: hsl(188 86% 53%);
+      --color-brand-emerald: hsl(142 71% 45%);
+      --color-brand-amber: hsl(38 92% 50%);
+      --color-brand-rose: hsl(346 87% 60%);
+      --color-brand-slate: hsl(215 16% 47%);
+    }
+    .dark {
+      --color-background: oklch(0.145 0 0);
+      --color-foreground: oklch(0.985 0 0);
+      --color-card: oklch(0.205 0 0);
+      --color-card-foreground: oklch(0.985 0 0);
+      --color-popover: oklch(0.205 0 0);
+      --color-popover-foreground: oklch(0.985 0 0);
+      --color-primary: oklch(0.922 0 0);
+      --color-primary-foreground: oklch(0.205 0 0);
+      --color-secondary: oklch(0.269 0 0);
+      --color-secondary-foreground: oklch(0.985 0 0);
+      --color-muted: oklch(0.269 0 0);
+      --color-muted-foreground: oklch(0.708 0 0);
+      --color-accent: oklch(0.269 0 0);
+      --color-accent-foreground: oklch(0.985 0 0);
+      --color-destructive: oklch(0.704 0.191 22.216);
+      --color-destructive-foreground: oklch(0.985 0 0);
+      --color-border: oklch(1 0 0 / 10%);
+      --color-input: oklch(1 0 0 / 15%);
+      --color-ring: oklch(0.556 0 0);
+      --color-brand-slate: hsl(215 16% 65%);
+    }
+    html, body { background: var(--color-background); color: var(--color-foreground); font-family: 'Inter', system-ui, sans-serif; }
+    /* date input picker indicator */
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+    .dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+  </style>
+</head>
+<body class="font-sans antialiased">
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="faker-catalog.js"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="args-editor.jsx"></script>
+  <script type="text/babel" src="schema-shell.jsx"></script>
+  <script type="text/babel" src="faker-cell.jsx"></script>
+  <script type="text/babel" src="args-variants.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
