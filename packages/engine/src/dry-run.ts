@@ -68,7 +68,8 @@ function substituteRefsForRow(
   draftProps: SchemaProp[],
   row: Record<string, unknown>,
   refRowsByKey: Map<string, Record<string, unknown>>,
-): void {
+): boolean {
+  let changed = false;
   const walkProps = (props: SchemaProp[], node: Record<string, unknown>): void => {
     for (const p of props) {
       const value = node[p.name];
@@ -80,10 +81,20 @@ function substituteRefsForRow(
           const refRow = refRowsByKey.get(targetKey);
           if (!refRow) {
             node[p.name] = null;
+            changed = true;
           } else if (targetField) {
-            node[p.name] = pickPath(refRow, targetField);
+            const v = pickPath(refRow, targetField);
+            // Defer substitution if the source field is itself an unresolved
+            // ref — a later pass will catch it once its dependency resolves.
+            // Without this guard, chained refs (a → b where b is also $ref)
+            // copy the placeholder object into the consumer field.
+            if (!isRefPlaceholder(v)) {
+              node[p.name] = v;
+              changed = true;
+            }
           } else {
             node[p.name] = refRow;
+            changed = true;
           }
           continue;
         }
@@ -106,6 +117,7 @@ function substituteRefsForRow(
     }
   };
   walkProps(draftProps, row);
+  return changed;
 }
 
 function stripMeta(row: ResolvedRow): Record<string, unknown> {
@@ -123,6 +135,7 @@ export async function dryRunSchema(params: DryRunSchemaParams): Promise<DryRunSc
   const refKeys = collectRefKeys(draft.properties);
   const refs: Record<string, Record<string, unknown>[]> = {};
   const refRowsByKeyByIndex: Map<string, Record<string, unknown>[]> = new Map();
+  const refSchemaProps = new Map<string, SchemaProp[]>();
 
   for (const key of refKeys) {
     const refSchema = referencedSchemas.get(key);
@@ -131,19 +144,42 @@ export async function dryRunSchema(params: DryRunSchemaParams): Promise<DryRunSc
     const plain = refRows.map((r) => stripMeta(r));
     refs[key] = plain;
     refRowsByKeyByIndex.set(key, plain);
+    refSchemaProps.set(key, refSchema.properties);
   }
 
-  for (let i = 0; i < mainRows.length; i++) {
-    const refRowsByKey = new Map<string, Record<string, unknown>>();
-    for (const [key, arr] of refRowsByKeyByIndex) {
-      const refRow = arr[i];
-      if (refRow) refRowsByKey.set(key, refRow);
+  // Resolve refs to a fixed point across BOTH the ref rows and the main rows.
+  // The ref rows themselves can contain unresolved $ref placeholders (e.g.
+  // a self-reference like mobile.internal_id → mobile.person_id where
+  // person_id is also $ref:mobile.id). Substituting into the main rows
+  // before those inner refs resolve would copy the placeholder object into
+  // the consumer field. Each pass resolves at least one level of chaining;
+  // bail as soon as a pass changes nothing.
+  const maxPasses = Math.max(2, refKeys.size + 2);
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let changed = false;
+    for (let i = 0; i < mainRows.length; i++) {
+      const refRowsByKey = new Map<string, Record<string, unknown>>();
+      for (const [key, arr] of refRowsByKeyByIndex) {
+        const refRow = arr[i];
+        if (refRow) refRowsByKey.set(key, refRow);
+      }
+      for (const [refKey, arr] of refRowsByKeyByIndex) {
+        const props = refSchemaProps.get(refKey)!;
+        const refRow = arr[i];
+        if (!refRow) continue;
+        if (substituteRefsForRow(props, refRow, refRowsByKey)) changed = true;
+      }
+      if (
+        substituteRefsForRow(
+          draft.properties,
+          mainRows[i] as unknown as Record<string, unknown>,
+          refRowsByKey,
+        )
+      ) {
+        changed = true;
+      }
     }
-    substituteRefsForRow(
-      draft.properties,
-      mainRows[i] as unknown as Record<string, unknown>,
-      refRowsByKey,
-    );
+    if (!changed) break;
   }
 
   return {

@@ -181,6 +181,70 @@ describe('runSetStream — soft cycles', () => {
   });
 });
 
+describe('runSetStream — self-references', () => {
+  it('resolves a soft self-ref to a sibling row (single-schema soft cycle)', async () => {
+    const schemas = [
+      schema('mobile', [
+        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'person_id', type: 'string', faker: '$ref:mobile.id', required: false },
+      ]),
+    ];
+    const set = buildSet([{ schemaKey: 'mobile', count: 3 }]);
+
+    const rows: Array<{ id: string; person_id: string }> = [];
+    for await (const b of runSetStream({
+      set,
+      schemas,
+      customFunctions: customFunctionRegistryFromMap(new Map()),
+      sandbox: fakeSandbox,
+      batchSize: 10,
+    })) {
+      rows.push(...(b.rows as unknown as Array<{ id: string; person_id: string }>));
+    }
+
+    expect(rows).toHaveLength(3);
+    const ids = new Set(rows.map((r) => r.id));
+    for (const r of rows) {
+      expect(typeof r.person_id).toBe('string');
+      expect(ids.has(r.person_id)).toBe(true);
+    }
+  });
+
+  it('resolves a chain of self-refs (a → b → c) within one schema', async () => {
+    const schemas = [
+      schema('mobile', [
+        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'person_id', type: 'string', faker: '$ref:mobile.id', required: false },
+        { name: 'internal_id', type: 'string', faker: '$ref:mobile.person_id', required: false },
+      ]),
+    ];
+    const set = buildSet([{ schemaKey: 'mobile', count: 3 }]);
+
+    const rows: Array<{ id: string; person_id: string; internal_id: string }> = [];
+    for await (const b of runSetStream({
+      set,
+      schemas,
+      customFunctions: customFunctionRegistryFromMap(new Map()),
+      sandbox: fakeSandbox,
+      batchSize: 10,
+    })) {
+      rows.push(
+        ...(b.rows as unknown as Array<{
+          id: string;
+          person_id: string;
+          internal_id: string;
+        }>),
+      );
+    }
+
+    const ids = new Set(rows.map((r) => r.id));
+    for (const r of rows) {
+      expect(typeof r.internal_id).toBe('string');
+      expect(ids.has(r.internal_id)).toBe(true);
+    }
+  });
+});
+
 describe('runSetStream — cancellation', () => {
   it('throws CancelledError when signal is aborted between batches', async () => {
     const schemas = [

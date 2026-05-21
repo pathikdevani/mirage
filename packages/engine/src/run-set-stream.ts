@@ -70,8 +70,10 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
   const projectedColumns = new Map<string, Map<string, unknown[]>>();
 
   // Seed pass: materialise every member of every soft-cycle group up front,
-  // then push their anchor projections into projectedColumns so peer resolvers
-  // have data to read during the main pass.
+  // resolve in-group soft refs inside those rows (so chained refs like
+  // a→b where b is itself a ref don't leak the unresolved placeholder),
+  // then push the resulting anchor projections into projectedColumns so
+  // peer resolvers have real values to read during the main pass.
   const seededSchemas = new Set<string>();
   for (const group of plan.softCycleSeedFields) {
     for (const member of group) seededSchemas.add(member.schemaKey);
@@ -86,6 +88,10 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
         cache: materialisedRows,
       });
     }
+
+    // Seed projections from the freshly-materialised rows. Fields that are
+    // themselves $ref still hold a RefPlaceholder at this point; the
+    // substitution loop below replaces those in place.
     for (const member of group) {
       const rows = materialisedRows.get(member.schemaKey)!;
       if (!projectedColumns.has(member.schemaKey)) {
@@ -99,6 +105,62 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
           arr.push(getByPath(row as Record<string, unknown>, fp));
         }
       }
+    }
+
+    // Resolve in-group soft refs to a fixed point. Custom-strategy edges are
+    // skipped here (they need fully-materialised source/target rows and run
+    // on a different code path in the main loop).
+    const groupSet = new Set(group.map((m) => m.schemaKey));
+    const inGroupEdges = allEdges.filter(
+      (e) =>
+        !e.hard &&
+        groupSet.has(e.fromSchemaKey) &&
+        groupSet.has(e.toSchemaKey) &&
+        strategyFor(set, e).type !== 'custom',
+    );
+    const seedResolvers = new Map<string, StrategyResolver>();
+    for (const e of inGroupEdges) {
+      const targetProjection =
+        e.toFieldPath !== undefined
+          ? (idx: number) => projectedColumns.get(e.toSchemaKey)?.get(e.toFieldPath!)?.[idx]
+          : undefined;
+      const resolver = await createStrategyResolver({
+        strategy: strategyFor(set, e),
+        edge: e,
+        sourceCount: countByKey.get(e.fromSchemaKey) ?? 0,
+        targetCount: countByKey.get(e.toSchemaKey) ?? 0,
+        salt: set.salt,
+        customFunctions,
+        sandbox,
+        ...(targetProjection ? { targetProjection } : {}),
+        ...(e.cardinality === 'many' ? { many: { min: 1, max: 3 } } : {}),
+      });
+      seedResolvers.set(edgeKey(e), resolver);
+    }
+
+    // A chain of length N (e.g. c → b → a where b and c are both $ref) needs
+    // N passes to resolve fully. Bound by `inGroupEdges.length` as a safety
+    // net; the loop bails as soon as a pass makes no changes.
+    const maxPasses = Math.max(1, inGroupEdges.length);
+    for (let pass = 0; pass < maxPasses; pass++) {
+      let changed = false;
+      for (const e of inGroupEdges) {
+        const resolver = seedResolvers.get(edgeKey(e))!;
+        const rows = materialisedRows.get(e.fromSchemaKey)!;
+        const fromCols = projectedColumns.get(e.fromSchemaKey);
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i] as unknown as Record<string, unknown>;
+          const current = getByPath(row, e.fromFieldPath);
+          if (!isRefPlaceholder(current)) continue;
+          const value = resolver(i);
+          if (isRefPlaceholder(value)) continue; // dependency not resolved yet
+          substituteRef(row, e.fromFieldPath, value);
+          const arr = fromCols?.get(e.fromFieldPath);
+          if (arr) arr[i] = value;
+          changed = true;
+        }
+      }
+      if (!changed) break;
     }
   }
 

@@ -123,4 +123,12 @@ describe('topoSortWithSoftCycles', () => {
     expect(result.softCycleGroups).toHaveLength(1);
     expect(new Set(result.softCycleGroups[0]!)).toEqual(new Set(['phone', 'person']));
   });
+
+  it('groups a singleton schema that soft-references itself', () => {
+    const keys = new Set(['mobile']);
+    const edges = [softEdge('mobile', 'mobile', 'person_id')];
+    const result = topoSortWithSoftCycles(keys, edges);
+    expect(result.order).toEqual(['mobile']);
+    expect(result.softCycleGroups).toEqual([['mobile']]);
+  });
 });

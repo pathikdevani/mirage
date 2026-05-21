@@ -146,7 +146,13 @@ export function topoSortWithSoftCycles(
     if (!groupsById.has(id)) groupsById.set(id, []);
     groupsById.get(id)!.push(k);
   }
-  const softCycleGroups = [...groupsById.values()].filter((g) => g.length > 1);
+  // Singleton SCCs with a self-edge are real soft cycles too — Kosaraju doesn't
+  // promote them to size 2, so filtering on `g.length > 1` alone would silently
+  // skip the seed pass for a schema that soft-references itself.
+  const hasSelfLoop = (k: string): boolean => (softAdj.get(k) ?? []).includes(k);
+  const softCycleGroups = [...groupsById.values()].filter(
+    (g) => g.length > 1 || (g.length === 1 && hasSelfLoop(g[0]!)),
+  );
 
   // Condensed topo over SCCs. Edge A→B (A references B) ⇒ B before A.
   const nodeOfSchema = (k: string): number => sccId.get(k)!;

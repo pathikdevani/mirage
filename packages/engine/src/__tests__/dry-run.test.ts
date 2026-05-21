@@ -70,6 +70,32 @@ describe('dryRunSchema', () => {
     expect(userOrgIds).toEqual(orgIds);
   });
 
+  it('resolves chained self-refs (a → b → c) within a single schema', async () => {
+    const mobile = schema('mobile', [
+      { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+      { name: 'person_id', type: 'string', faker: '$ref:mobile.id', required: false },
+      { name: 'internal_id', type: 'string', faker: '$ref:mobile.person_id', required: false },
+    ]);
+    const result = await dryRunSchema({
+      draft: mobile,
+      referencedSchemas: new Map([['mobile', mobile]]),
+      count: 3,
+      salt: 'preview',
+      locale: 'en',
+      customFunctions: customFunctionRegistryFromMap(new Map()),
+      sandbox: fakeSandbox,
+    });
+    const rows = result.rows as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(3);
+    for (const r of rows) {
+      expect(typeof r['id']).toBe('string');
+      expect(typeof r['person_id']).toBe('string');
+      expect(typeof r['internal_id']).toBe('string');
+      expect(r['person_id']).toBe(r['id']);
+      expect(r['internal_id']).toBe(r['id']);
+    }
+  });
+
   it('leaves fields as null when ref target is missing from referencedSchemas', async () => {
     const draft = schema('user', [
       { name: 'id', type: 'string', faker: 'string.uuid', required: false },
