@@ -241,6 +241,37 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
     let schemaProduced = 0;
     let buffer: ResolvedRow[] = [];
 
+    // Seeded schemas (members of a soft-cycle group) have their rows in
+    // memory already, with cross-schema $ref fields still holding
+    // RefPlaceholders. Run a global multi-pass that substitutes every
+    // outgoing edge across every row before streaming starts. This makes
+    // projection-bearing in-group edges (e.g. random self-soft-cycle
+    // picking any target index) safe — every projected column is fully
+    // resolved by the time the per-row loop reads it.
+    if (isSeeded) {
+      const cached = materialisedRows.get(schemaKey) ?? [];
+      const fromCols = projectedColumns.get(schemaKey);
+      const maxPasses = Math.max(1, outgoing.length);
+      for (let pass = 0; pass < maxPasses; pass++) {
+        let changed = false;
+        for (const e of outgoing) {
+          const resolver = resolvers.get(edgeKey(e))!;
+          const arr = fromCols?.get(e.fromFieldPath);
+          for (let i = 0; i < cached.length; i++) {
+            const row = cached[i] as unknown as Record<string, unknown>;
+            const current = getByPath(row, e.fromFieldPath);
+            if (!isRefPlaceholder(current)) continue;
+            const value = resolver(i);
+            if (isRefPlaceholder(value)) continue;
+            substituteRef(row, e.fromFieldPath, value);
+            if (arr) arr[i] = value;
+            changed = true;
+          }
+        }
+        if (!changed) break;
+      }
+    }
+
     const rowSource: AsyncIterable<ResolvedRow> = isSeeded
       ? (async function* () {
           const cached = materialisedRows.get(schemaKey) ?? [];
@@ -261,17 +292,41 @@ export async function* runSetStream(params: RunSetStreamParams): AsyncIterable<R
       // schemas with custom-function fields).
       if (signal?.aborted) throw new CancelledError();
       const sourceIndex = schemaProduced + buffer.length;
-      for (const e of outgoing) {
-        const resolver = resolvers.get(edgeKey(e))!;
-        const value = resolver(sourceIndex);
-        substituteRef(row as Record<string, unknown>, e.fromFieldPath, value);
+      // Multi-pass substitution. A self-soft-cycle field can project a
+      // sibling field that's itself a cross-schema $ref (e.g.
+      // mobile.internal_id → mobile.person_id where person_id → person.id).
+      // The sibling resolver reads from projectedColumns, so we sync each
+      // substituted field back into that map immediately and re-run any
+      // edges whose resolver previously returned a placeholder.
+      const fromCols = projectedColumns.get(schemaKey);
+      const maxPasses = Math.max(1, outgoing.length);
+      for (let pass = 0; pass < maxPasses; pass++) {
+        let changed = false;
+        for (const e of outgoing) {
+          const current = getByPath(row as Record<string, unknown>, e.fromFieldPath);
+          if (!isRefPlaceholder(current)) continue;
+          const resolver = resolvers.get(edgeKey(e))!;
+          const value = resolver(sourceIndex);
+          if (isRefPlaceholder(value)) continue;
+          substituteRef(row as Record<string, unknown>, e.fromFieldPath, value);
+          const arr = fromCols?.get(e.fromFieldPath);
+          if (arr) arr[sourceIndex] = value;
+          changed = true;
+        }
+        if (!changed) break;
       }
       buffer.push(row);
 
-      if (myProjections && !isSeeded) {
+      if (myProjections) {
         const cols = projectedColumns.get(schemaKey)!;
         for (const fp of myProjections) {
-          cols.get(fp)!.push(getByPath(row as Record<string, unknown>, fp));
+          // Per-edge sync above already covers fields substituted this row;
+          // skip them and capture only the leftover (plain or unsubstituted)
+          // projection fields. Length-vs-index guards both the !isSeeded
+          // append case and the isSeeded pre-populated case.
+          const arr = cols.get(fp)!;
+          if (arr.length > sourceIndex) continue;
+          arr[sourceIndex] = getByPath(row as Record<string, unknown>, fp);
         }
       }
 

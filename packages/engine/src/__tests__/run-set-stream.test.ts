@@ -243,6 +243,112 @@ describe('runSetStream — self-references', () => {
       expect(ids.has(r.internal_id)).toBe(true);
     }
   });
+
+  it('resolves a self-soft-cycle with random strategy projecting an out-of-group ref field', async () => {
+    // Same shape as the test below, but the in-group edge uses `random`
+    // instead of the implicit `1:1`. With random, the resolver picks any
+    // target index — including ones whose own out-of-group $ref hasn't
+    // been substituted yet under naïve in-order processing — so the fix
+    // must fully resolve out-of-group fields before in-group projection
+    // reads start happening.
+    const schemas = [
+      schema('person', [
+        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+      ]),
+      schema('mobile', [
+        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'person_id', type: 'string', faker: '$ref:person.id', required: false },
+        { name: 'internal_id', type: 'string', faker: '$ref:mobile.person_id', required: false },
+      ]),
+    ];
+    const set = buildSet(
+      [
+        { schemaKey: 'person', count: 10 },
+        { schemaKey: 'mobile', count: 10 },
+      ],
+      [
+        {
+          schemaKey: 'mobile',
+          fieldPath: 'internal_id',
+          strategy: { type: 'random', allowDuplicates: true },
+        },
+      ],
+    );
+
+    const rows: Array<{ id: string; person_id: unknown; internal_id: unknown }> = [];
+    for await (const b of runSetStream({
+      set,
+      schemas,
+      customFunctions: customFunctionRegistryFromMap(new Map()),
+      sandbox: fakeSandbox,
+      batchSize: 10,
+    })) {
+      if (b.schemaKey !== 'mobile') continue;
+      rows.push(
+        ...(b.rows as unknown as Array<{
+          id: string;
+          person_id: unknown;
+          internal_id: unknown;
+        }>),
+      );
+    }
+
+    expect(rows).toHaveLength(10);
+    const personIdSet = new Set(rows.map((r) => r.person_id as string));
+    for (const r of rows) {
+      expect(typeof r.person_id).toBe('string');
+      expect(typeof r.internal_id).toBe('string');
+      expect(personIdSet.has(r.internal_id as string)).toBe(true);
+    }
+  });
+
+  it('resolves a self-soft-cycle field that projects an out-of-group ref field', async () => {
+    // Reproduces the bug where mobile.internal_id projects mobile.person_id,
+    // but mobile.person_id is itself a cross-schema $ref. The seed pass for
+    // mobile's self-soft-cycle copied the unresolved RefPlaceholder for
+    // person_id into projectedColumns, and the main loop never refreshed
+    // that column after substituting person_id — so internal_id ended up
+    // holding the stale placeholder.
+    const schemas = [
+      schema('person', [
+        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+      ]),
+      schema('mobile', [
+        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'person_id', type: 'string', faker: '$ref:person.id', required: false },
+        { name: 'internal_id', type: 'string', faker: '$ref:mobile.person_id', required: false },
+      ]),
+    ];
+    const set = buildSet([
+      { schemaKey: 'person', count: 3 },
+      { schemaKey: 'mobile', count: 3 },
+    ]);
+
+    const rows: Array<{ id: string; person_id: unknown; internal_id: unknown }> = [];
+    for await (const b of runSetStream({
+      set,
+      schemas,
+      customFunctions: customFunctionRegistryFromMap(new Map()),
+      sandbox: fakeSandbox,
+      batchSize: 10,
+    })) {
+      if (b.schemaKey !== 'mobile') continue;
+      rows.push(
+        ...(b.rows as unknown as Array<{
+          id: string;
+          person_id: unknown;
+          internal_id: unknown;
+        }>),
+      );
+    }
+
+    expect(rows).toHaveLength(3);
+    for (const r of rows) {
+      expect(typeof r.person_id).toBe('string');
+      expect(typeof r.internal_id).toBe('string');
+      expect(r.internal_id).toBe(r.person_id);
+    }
+  });
 });
 
 describe('runSetStream — cancellation', () => {
