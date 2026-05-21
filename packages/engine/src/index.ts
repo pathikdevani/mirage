@@ -20,3 +20,4 @@ export * from './plan-run-set.js';
 export * from './strategy-resolver.js';
 export * from './generate-rows.js';
 export * from './run-set-stream.js';
+export * from './dry-run.js';

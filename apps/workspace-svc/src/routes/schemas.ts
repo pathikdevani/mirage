@@ -2,7 +2,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ClientSession } from 'mongodb';
 import { nanoid } from 'nanoid';
 import { asId, type Api, type WorkspaceId } from '@mirage/types';
+import {
+  customFunctionRegistryFromMap,
+  dryRunSchema,
+  type CustomFunctionEntry,
+} from '@mirage/engine';
 import type { MirageDb, SchemaDoc } from '../db.js';
+import { getSandbox } from '../sandbox-singleton.js';
 
 type Schema = Api.components['schemas']['Schema'];
 type SchemaProp = Api.components['schemas']['SchemaProp'];
@@ -293,6 +299,94 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
       return reply.send(list);
     },
   );
+
+  app.post<{
+    Params: ListParams;
+    Querystring: { count?: string };
+    Body: Api.components['schemas']['DryRunSchemaBody'];
+  }>('/workspaces/:wsId/schemas/dry-run', async (request, reply) => {
+    const ctx = await resolveWorkspace(request, reply, request.params.wsId);
+    if (!ctx) return;
+
+    const draftBody = request.body?.schema;
+    if (!draftBody || typeof draftBody !== 'object') {
+      return reply.code(400).send(err('schema_required', '`schema` body field is required'));
+    }
+    const normalized = normalizeAndValidateBody(draftBody);
+    if ('code' in normalized) {
+      return reply
+        .code(422)
+        .send({ error: normalized.message, code: normalized.code, detail: normalized.detail });
+    }
+
+    const rawCount = request.query.count;
+    let count = rawCount === undefined ? 1 : Number.parseInt(rawCount, 10);
+    if (!Number.isFinite(count) || count < 1) count = 1;
+    if (count > 10) count = 10;
+
+    const salt = typeof request.body?.salt === 'string' && request.body.salt.length > 0
+      ? request.body.salt
+      : `preview:${request.params.wsId}:${normalized.key}`;
+
+    const allInWs = await db.schemas
+      .find({ workspaceId: request.params.wsId }, { projection: { _id: 0 } })
+      .toArray();
+    const byKey = new Map<string, SchemaDoc>(allInWs.map((s) => [s.key, s]));
+
+    const referencedSchemas = new Map<string, Api.components['schemas']['Schema']>();
+    const refs = collectRefs(normalized.properties);
+    for (const r of refs) {
+      if (referencedSchemas.has(r.targetKey)) continue;
+      const target = byKey.get(r.targetKey);
+      if (target) referencedSchemas.set(r.targetKey, target as Api.components['schemas']['Schema']);
+    }
+
+    const fnRefs = collectFnRefs(normalized.properties);
+    const fnMap = new Map<string, CustomFunctionEntry>();
+    if (fnRefs.length > 0) {
+      const ids = Array.from(new Set(fnRefs.map((r) => r.functionId)));
+      const fns = await db.customFunctions
+        .find(
+          { workspaceId: request.params.wsId, id: { $in: ids } },
+          { projection: { _id: 0 } },
+        )
+        .toArray();
+      for (const f of fns) fnMap.set(f.id, { source: f.source, usage: f.usage });
+    }
+    const registry = customFunctionRegistryFromMap(fnMap);
+
+    const draftSchema: Api.components['schemas']['Schema'] = {
+      id: 'sch_preview',
+      workspaceId: request.params.wsId,
+      orgId: ctx.workspace.orgId,
+      key: normalized.key,
+      name: normalized.name,
+      description: normalized.description,
+      color: normalized.color,
+      icon: normalized.icon,
+      tags: normalized.tags,
+      properties: normalized.properties,
+      createdBy: ctx.auth.userId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as Api.components['schemas']['Schema'];
+
+    try {
+      const result = await dryRunSchema({
+        draft: draftSchema,
+        referencedSchemas,
+        count,
+        salt,
+        locale: 'en',
+        customFunctions: registry,
+        sandbox: getSandbox(),
+      });
+      return reply.send(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'preview generation failed';
+      return reply.code(500).send(err('preview_failed', msg));
+    }
+  });
 
   app.get<{ Params: IdParams }>('/workspaces/:wsId/schemas/:id', async (request, reply) => {
     const ctx = await resolveWorkspace(request, reply, request.params.wsId);

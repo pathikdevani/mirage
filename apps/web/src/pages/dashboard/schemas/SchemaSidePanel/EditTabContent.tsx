@@ -1,60 +1,44 @@
 import { useEffect, useState } from 'react';
-import { Copy, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Copy, Trash2 } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { TYPE_OPTIONS } from '../lib/types.js';
 import { FakerCell } from '../PropertyEditor/FakerCell.js';
 import { applyTypeChange } from '../PropertyEditor/PropertyEditorRow.js';
 
-export interface PropDetailDrawerProps {
-  open: boolean;
-  prop: SchemaProp | null;
+export interface EditTabContentProps {
+  prop: SchemaProp;
   workspaceSchemas: Schema[];
   onChange: (next: SchemaProp) => void;
   onDuplicate: () => void;
   onRemove: () => void;
-  onClose: () => void;
+  onBack: () => void;
 }
 
-export function PropDetailDrawer({
-  open,
+export function EditTabContent({
   prop,
   workspaceSchemas,
   onChange,
   onDuplicate,
   onRemove,
-  onClose,
-}: PropDetailDrawerProps) {
+  onBack,
+}: EditTabContentProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  // Reset the picker when the selection changes.
-  useEffect(() => setPickerOpen(false), [prop?.name, prop?.type]);
-
-  if (!open || !prop) return null;
+  useEffect(() => setPickerOpen(false), [prop.name, prop.type]);
 
   const isContainer = prop.type === 'object' || prop.type === 'array';
   const isArrayItem = prop.name === '';
   const currentValue = `${prop.type}${prop.format ? `|${prop.format}` : ''}`;
 
   return (
-    <aside
-      className={cn(
-        'absolute right-0 top-0 bottom-0 z-30 flex w-[400px] flex-col border-l border-border bg-card shadow-[-8px_0_24px_-12px_rgba(0,0,0,0.15)]',
-      )}
-    >
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Property
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label="Close"
-        >
-          <X size={14} />
-        </button>
-      </div>
+    <div className="flex h-full flex-col">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex flex-none items-center gap-1.5 border-b border-border px-4 py-2 text-[12px] text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft size={12} /> Back to preview
+      </button>
 
       <div className="flex-1 overflow-y-auto px-4 py-3">
         <div className="flex flex-col gap-3">
@@ -129,7 +113,7 @@ export function PropDetailDrawer({
       </div>
 
       {!isArrayItem && (
-        <div className="flex items-center justify-end gap-2 border-t border-border bg-card px-4 py-3">
+        <div className="flex flex-none items-center justify-end gap-2 border-t border-border bg-card px-4 py-3">
           <button
             type="button"
             onClick={onDuplicate}
@@ -146,7 +130,7 @@ export function PropDetailDrawer({
           </button>
         </div>
       )}
-    </aside>
+    </div>
   );
 }
 

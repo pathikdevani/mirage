@@ -56,6 +56,20 @@ export function registerSchemaProxyRoutes(app: FastifyInstance): void {
   app.post<{ Params: { wsId: string } }>('/workspaces/:wsId/schemas', (req, reply) =>
     forward(req, reply, `/workspaces/${encodeURIComponent(req.params.wsId)}/schemas`),
   );
+  app.post<{ Params: { wsId: string }; Querystring: { count?: string } }>(
+    '/workspaces/:wsId/schemas/dry-run',
+    (req, reply) => {
+      const count = req.query['count'];
+      const qs = typeof count === 'string' && count.length > 0
+        ? `?count=${encodeURIComponent(count)}`
+        : '';
+      return forward(
+        req,
+        reply,
+        `/workspaces/${encodeURIComponent(req.params.wsId)}/schemas/dry-run${qs}`,
+      );
+    },
+  );
   app.get<{ Params: { wsId: string; id: string } }>('/workspaces/:wsId/schemas/:id', (req, reply) =>
     forward(
       req,

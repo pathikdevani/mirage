@@ -214,6 +214,41 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /workspaces/{wsId}/schemas/dry-run:
+    parameters:
+      - in: path
+        name: wsId
+        required: true
+        schema: { type: string }
+      - in: query
+        name: count
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 10, default: 1 }
+    post:
+      summary: Generate sample rows for an in-memory schema draft without persisting
+      operationId: dryRunSchema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DryRunSchemaBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DryRunSchemaResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/BadRequest'
+
   /workspaces/{wsId}/sets:
     parameters:
       - in: path
@@ -699,6 +734,36 @@ components:
           items:
             $ref: '#/components/schemas/SchemaProp'
         expectedUpdatedAt: { type: string, format: date-time }
+
+    DryRunSchemaBody:
+      type: object
+      required: [schema]
+      additionalProperties: false
+      properties:
+        schema:
+          $ref: '#/components/schemas/CreateSchemaBody'
+        salt:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+    DryRunSchemaResponse:
+      type: object
+      required: [rows, refs]
+      additionalProperties: false
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        refs:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              additionalProperties: true
 
     Strategy:
       oneOf:

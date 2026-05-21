@@ -5,8 +5,7 @@ import { Database, Plus } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
 import { bff } from '../../api/client.js';
 import { ListPane } from './schemas/ListPane.js';
-import { EditPane } from './schemas/EditPane/EditPane.js';
-import { PreviewPane } from './schemas/PreviewPane.js';
+import { SchemaEditorShell } from './schemas/SchemaEditorShell.js';
 import { CreateSchemaSheet } from './schemas/CreateSchemaSheet/index.js';
 import type { Schema } from './schemas/lib/types.js';
 
@@ -129,36 +128,33 @@ export function SchemasPage() {
       ) : isEmpty ? (
         <EmptyState onCreate={() => setCreating(true)} />
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-[280px_1fr_320px]">
+        <div className="grid min-h-0 flex-1 grid-cols-[280px_1fr]">
           <ListPane
             schemas={schemas}
             activeId={activeId}
             onSelect={requestSelect}
           />
-          <div className="min-h-0">
-            {activeSchema ? (
-              <EditPane
-                key={activeSchema.id}
-                schema={activeSchema}
-                workspaceSchemas={schemas}
-                wsId={wsId!}
-                onDirtyChange={(dirty) => {
-                  dirtyRef.current = dirty;
-                }}
-                onDeleted={() => {
-                  dirtyRef.current = false;
-                  commitSelect(null);
-                  queryClient.invalidateQueries({ queryKey: ['schemas', wsId] });
-                }}
-                onSelectReferrer={selectByKey}
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">
-                Select a schema from the left
-              </div>
-            )}
-          </div>
-          <PreviewPane wsId={wsId!} />
+          {activeSchema ? (
+            <SchemaEditorShell
+              key={activeSchema.id}
+              schema={activeSchema}
+              workspaceSchemas={schemas}
+              wsId={wsId!}
+              onDirtyChange={(dirty) => {
+                dirtyRef.current = dirty;
+              }}
+              onDeleted={() => {
+                dirtyRef.current = false;
+                commitSelect(null);
+                queryClient.invalidateQueries({ queryKey: ['schemas', wsId] });
+              }}
+              onSelectReferrer={selectByKey}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-[13px] text-muted-foreground">
+              Select a schema from the left
+            </div>
+          )}
         </div>
       )}
 

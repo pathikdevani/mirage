@@ -28,4 +28,9 @@ export const env = {
     bucket: optional('S3_BUCKET', 'mirage'),
     forcePathStyle: optional('S3_FORCE_PATH_STYLE', 'true') === 'true',
   },
+  sandbox: {
+    poolSize: Number.parseInt(optional('SANDBOX_POOL_SIZE', '2'), 10),
+    callTimeoutMs: Number.parseInt(optional('SANDBOX_CALL_TIMEOUT_MS', '5000'), 10),
+    memoryCapMb: Number.parseInt(optional('SANDBOX_MEMORY_CAP_MB', '64'), 10),
+  },
 } as const;

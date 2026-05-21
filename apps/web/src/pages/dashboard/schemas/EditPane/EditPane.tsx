@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { bff } from '../../../../api/client.js';
-import type { Schema, SchemaProp } from '../lib/types.js';
+import type { Schema } from '../lib/types.js';
 import { countTreeStats } from '../lib/treeStats.js';
 import { validateTree, type ValidationIssue } from '../lib/validateTree.js';
 import {
@@ -11,30 +11,33 @@ import {
 } from '../lib/mapServerError.js';
 import { PropertyEditor } from '../PropertyEditor/PropertyEditor.js';
 import { SchemaHeaderInline } from './SchemaHeaderInline.js';
-import { PropDetailDrawer } from './PropDetailDrawer.js';
 import { SaveBar, type SaveBarBanner } from './SaveBar.js';
-import { useSchemaBuffer } from './useSchemaBuffer.js';
+import type { SchemaBuffer } from './useSchemaBuffer.js';
 
 export interface EditPaneProps {
   schema: Schema;
+  buffer: SchemaBuffer;
   workspaceSchemas: Schema[];
   wsId: string;
-  onDirtyChange?: (dirty: boolean) => void;
-  onDeleted?: () => void;
-  onSelectReferrer?: (key: string) => void;
+  selectedPath: string | null;
+  onSelectPath: (path: string | null) => void;
+  onDirtyChange?: ((dirty: boolean) => void) | undefined;
+  onDeleted?: (() => void) | undefined;
+  onSelectReferrer?: ((key: string) => void) | undefined;
 }
 
 export function EditPane({
   schema,
+  buffer,
   workspaceSchemas,
   wsId,
+  selectedPath,
+  onSelectPath,
   onDirtyChange,
   onDeleted,
   onSelectReferrer,
 }: EditPaneProps) {
   const queryClient = useQueryClient();
-  const buffer = useSchemaBuffer(schema);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
   // Error / banner state
   const [rowErrors, setRowErrors] = useState<ReadonlyMap<string, ValidationIssue>>(new Map());
@@ -73,15 +76,6 @@ export function EditPane({
   useEffect(() => {
     onDirtyChange?.(buffer.isDirty);
   }, [buffer.isDirty, onDirtyChange]);
-
-  // Clear selection when its target disappears from the draft.
-  const selectedProp = useMemo(
-    () => (selectedPath ? buffer.getByPath(selectedPath) : null),
-    [selectedPath, buffer],
-  );
-  useEffect(() => {
-    if (selectedPath && !selectedProp) setSelectedPath(null);
-  }, [selectedPath, selectedProp]);
 
   const mapServerError = useMemo(
     () =>
@@ -171,29 +165,6 @@ export function EditPane({
     setKeyError(null);
     setNameError(null);
     buffer.setDraft((prev) => ({ ...prev, ...patch }));
-  };
-
-  const handleDrawerChange = (next: SchemaProp): void => {
-    if (!selectedPath || !selectedProp) return;
-    const prevName = selectedProp.name;
-    buffer.updateByPath(selectedPath, () => next);
-    if (next.name !== prevName) {
-      const idx = selectedPath.lastIndexOf('.');
-      const parent = idx >= 0 ? selectedPath.slice(0, idx) : '';
-      setSelectedPath(parent ? `${parent}.${next.name}` : next.name);
-    }
-  };
-
-  const handleDrawerDuplicate = (): void => {
-    if (!selectedPath) return;
-    const newPath = buffer.duplicateByPath(selectedPath);
-    if (newPath) setSelectedPath(newPath);
-  };
-
-  const handleDrawerRemove = (): void => {
-    if (!selectedPath) return;
-    buffer.removeByPath(selectedPath);
-    setSelectedPath(null);
   };
 
   const banner: SaveBarBanner | null = staleBanner
@@ -287,17 +258,7 @@ export function EditPane({
           workspaceSchemas={workspaceSchemas}
           rowErrors={rowErrors}
           selectedPath={selectedPath}
-          onSelectPath={setSelectedPath}
-        />
-
-        <PropDetailDrawer
-          open={Boolean(selectedProp)}
-          prop={selectedProp}
-          workspaceSchemas={workspaceSchemas}
-          onChange={handleDrawerChange}
-          onDuplicate={handleDrawerDuplicate}
-          onRemove={handleDrawerRemove}
-          onClose={() => setSelectedPath(null)}
+          onSelectPath={onSelectPath}
         />
       </div>
 
@@ -308,7 +269,7 @@ export function EditPane({
         hasBlockingErrors={hasBlockingErrors}
         onDiscard={() => {
           buffer.reset();
-          setSelectedPath(null);
+          onSelectPath(null);
           clearTransientErrors();
         }}
         onSave={() => save.mutate()}

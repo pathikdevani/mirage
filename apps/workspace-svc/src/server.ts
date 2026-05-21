@@ -7,6 +7,7 @@ import { registerSchemaRoutes } from './routes/schemas.js';
 import { registerSetRoutes } from './routes/sets.js';
 import { registerCustomFunctionRoutes } from './routes/custom-functions.js';
 import { registerRunRoutes } from './routes/runs.js';
+import { shutdownSandbox } from './sandbox-singleton.js';
 
 export async function buildServer(db?: MirageDb) {
   const app = Fastify({
@@ -34,6 +35,7 @@ export async function buildServer(db?: MirageDb) {
 
   app.addHook('onClose', async () => {
     await database.client.close();
+    await shutdownSandbox();
   });
 
   return app;
