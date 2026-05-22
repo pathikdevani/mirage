@@ -60,11 +60,22 @@ export function FakerCell({
   const triggerRef = useRef<HTMLDivElement>(null);
   const [pickerAnchor, setPickerAnchor] = useState<DOMRect | null>(null);
   const [pickerQuery, setPickerQuery] = useState('');
+  // `empty` = opened by clicking an empty cell — the whole cell text is the
+  // filter, and picking clears it before inserting the chip.
+  // `at` = opened by typing `@…` — only the `@query` substring is the filter,
+  // and picking removes just that substring.
+  const [pickerMode, setPickerMode] = useState<'empty' | 'at' | null>(null);
   const [argsChip, setArgsChip] = useState<{
     el: HTMLElement;
     method: string;
     args: ArgsStored | undefined;
   } | null>(null);
+
+  const closePicker = (): void => {
+    setPickerAnchor(null);
+    setPickerQuery('');
+    setPickerMode(null);
+  };
 
   const customFunctions = useQuery({
     enabled: Boolean(wsId),
@@ -207,21 +218,30 @@ export function FakerCell({
       range.collapse(false);
     }
 
-    // remove "@query" trigger immediately before caret, if present
-    const node = range.startContainer;
-    if (node.nodeType === Node.TEXT_NODE) {
-      const txt = node.textContent ?? '';
-      const upToCaret = txt.slice(0, range.startOffset);
-      const atIdx = upToCaret.lastIndexOf('@');
-      if (atIdx >= 0) {
-        const before = txt.slice(0, atIdx);
-        const after = txt.slice(range.startOffset);
-        node.textContent = before;
-        range.setStart(node, before.length);
-        range.collapse(true);
-        if (after) {
-          const tail = document.createTextNode(after);
-          node.parentNode?.insertBefore(tail, node.nextSibling);
+    if (pickerMode === 'empty') {
+      // The user opened the picker on an empty cell and used the cell's typed
+      // text as the filter — clear that text so the chip stands alone.
+      ed.innerHTML = '';
+      range = document.createRange();
+      range.selectNodeContents(ed);
+      range.collapse(true);
+    } else {
+      // remove "@query" trigger immediately before caret, if present
+      const node = range.startContainer;
+      if (node.nodeType === Node.TEXT_NODE) {
+        const txt = node.textContent ?? '';
+        const upToCaret = txt.slice(0, range.startOffset);
+        const atIdx = upToCaret.lastIndexOf('@');
+        if (atIdx >= 0) {
+          const before = txt.slice(0, atIdx);
+          const after = txt.slice(range.startOffset);
+          node.textContent = before;
+          range.setStart(node, before.length);
+          range.collapse(true);
+          if (after) {
+            const tail = document.createTextNode(after);
+            node.parentNode?.insertBefore(tail, node.nextSibling);
+          }
         }
       }
     }
@@ -252,14 +272,16 @@ export function FakerCell({
     sel?.removeAllRanges();
     sel?.addRange(r2);
 
-    setPickerAnchor(null);
-    setPickerQuery('');
+    closePicker();
     emit();
   };
 
   const onInput = (): void => {
-    // Detect "@..." right before the caret
+    // Detect "@..." right before the caret; this always takes precedence so
+    // typing `@foo` inside an existing 'empty'-mode session still switches to
+    // the @-trigger flow.
     const sel = window.getSelection();
+    let handled = false;
     if (sel && sel.rangeCount > 0) {
       const r = sel.getRangeAt(0);
       const node = r.startContainer;
@@ -269,13 +291,21 @@ export function FakerCell({
         if (m) {
           setPickerAnchor(r.getBoundingClientRect());
           setPickerQuery(m[1] ?? '');
-        } else {
-          setPickerAnchor(null);
-          setPickerQuery('');
+          setPickerMode('at');
+          handled = true;
         }
+      }
+    }
+    if (!handled) {
+      if (pickerMode === 'empty') {
+        // Picker is open in empty-cell mode — every keystroke in the cell is
+        // part of the filter. Strip zero-width-space caret anchors before
+        // using the text as the query.
+        const txt = (editorRef.current?.textContent ?? '').replace(/​/g, '');
+        setPickerQuery(txt);
       } else {
-        setPickerAnchor(null);
-        setPickerQuery('');
+        // Not an @-trigger and not in empty mode → close any open picker.
+        closePicker();
       }
     }
     emit();
@@ -301,13 +331,15 @@ export function FakerCell({
       target = target.parentElement;
     }
 
-    // Empty cell click → open picker
+    // Empty cell click → open picker in empty-cell mode. Focus stays on the
+    // contentEditable so the user can keep typing to filter.
     const isEmpty = !value || value.length === 0;
     if (isEmpty) {
       const r = triggerRef.current?.getBoundingClientRect();
       if (r) {
         setPickerAnchor(r);
         setPickerQuery('');
+        setPickerMode('empty');
       }
     }
   };
@@ -356,10 +388,7 @@ export function FakerCell({
           refOptions={refOptions}
           customFunctions={customFunctions.data ?? []}
           onPick={insertSegment}
-          onClose={() => {
-            setPickerAnchor(null);
-            setPickerQuery('');
-          }}
+          onClose={closePicker}
         />
       )}
       {argsChip && (
@@ -502,11 +531,8 @@ function SegmentPicker({
     setPos({ left, top: rect.bottom + 4, width: w });
   }, [rect]);
 
-  // Focus once `pos` is set — the first render returns null (waiting for
-  // `pos`), so an empty-deps effect would fire before the input exists.
-  useEffect(() => {
-    if (pos) inputRef.current?.focus();
-  }, [pos]);
+  // Don't focus the filter input — keep focus on the parent contentEditable
+  // cell so the user can type to filter while staying in the cell.
   useEffect(() => {
     setQ(initialQuery);
   }, [initialQuery]);
