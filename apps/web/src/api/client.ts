@@ -21,7 +21,17 @@ export const queryClient = new QueryClient({
  */
 const authMiddleware: Middleware = {
   async onRequest({ request }) {
-    const user = await userManager.getUser();
+    let user = await userManager.getUser();
+    // Access tokens are short-lived (Keycloak default 15min). If the tab was
+    // backgrounded past the in-memory silent-renew timer, the cached token is
+    // already expired — refresh on demand before sending.
+    if (user?.expired && user.refresh_token) {
+      try {
+        user = await userManager.signinSilent();
+      } catch {
+        user = null;
+      }
+    }
     if (user?.access_token) {
       request.headers.set('Authorization', `Bearer ${user.access_token}`);
     }
