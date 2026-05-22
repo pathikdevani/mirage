@@ -10,7 +10,7 @@ export function Sidebar() {
   const wsId = params.wsId ?? null;
 
   return (
-    <aside className="sticky top-14 h-[calc(100vh-56px)] w-60 overflow-y-auto border-r border-border bg-[hsl(0_0%_99%)]">
+    <aside className="sticky top-14 h-[calc(100vh-56px)] w-60 overflow-y-auto border-r border-border bg-background">
       <nav className="flex flex-col gap-6 px-3 py-5">
         {NAV.map((section) => (
           <div key={section.section}>

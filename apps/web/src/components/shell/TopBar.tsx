@@ -4,6 +4,7 @@ import { cn } from '@mirage/ui-kit';
 import { MirageLogo } from './MirageLogo.js';
 import { OrgSwitcher } from './OrgSwitcher.js';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
+import { ThemeToggle } from '../theme/ThemeToggle.js';
 import { useAuth } from '../../auth/AuthProvider.js';
 import { logout } from '../../auth/oidc.js';
 
@@ -26,6 +27,7 @@ export function TopBar() {
         <SearchInput />
         <IconButton label="Notifications" icon={<Bell size={16} strokeWidth={1.75} />} />
         <IconButton label="Help" icon={<HelpCircle size={16} strokeWidth={1.75} />} />
+        <ThemeToggle />
         <AvatarMenu />
       </div>
     </header>
