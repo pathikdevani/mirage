@@ -79,6 +79,88 @@ describe('generateRows', () => {
     }
   });
 
+  it('resolves a ValueExpr arg that references a sibling field before calling faker', async () => {
+    // `internet.email` takes firstName/lastName as args; here both are
+    // ValueExprs that point at sibling fields, so the engine must evaluate
+    // the siblings first and pass their string values to faker.
+    const sch = schema([
+      { name: 'fname', type: 'string', required: true, value: [{ kind: 'text', text: 'Ada' }] },
+      { name: 'lname', type: 'string', required: true, value: [{ kind: 'text', text: 'Lovelace' }] },
+      {
+        name: 'email',
+        type: 'string',
+        required: true,
+        value: [
+          {
+            kind: 'method',
+            method: 'internet.email',
+            args: {
+              firstName: [{ kind: 'field', name: 'fname' }],
+              lastName: [{ kind: 'field', name: 'lname' }],
+              provider: [{ kind: 'text', text: 'example.org' }],
+            },
+          },
+        ],
+      },
+    ]);
+    const [row] = await drain(sch);
+    const email = String(row!['email']);
+    // faker may transform/casefold, but the firstName + lastName + provider
+    // we pipe in must appear; the literal {{fname}}-style template would
+    // never satisfy this.
+    expect(email.toLowerCase()).toContain('ada');
+    expect(email.toLowerCase()).toContain('lovelace');
+    expect(email.endsWith('@example.org')).toBe(true);
+  });
+
+  it('resolves a ValueExpr arg whose value is an inline faker call', async () => {
+    // `min` here is a nested faker call: `number.int({ min: 5, max: 5 })`
+    // → 5. The outer call then becomes `number.int({ min: 5, max: 5 })`.
+    const sch = schema([
+      {
+        name: 'n',
+        type: 'integer',
+        required: true,
+        value: [
+          {
+            kind: 'method',
+            method: 'number.int',
+            args: {
+              min: [
+                { kind: 'method', method: 'number.int', args: { min: 5, max: 5 } },
+              ],
+              max: [
+                { kind: 'method', method: 'number.int', args: { min: 5, max: 5 } },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+    const [row] = await drain(sch);
+    expect(row!['n']).toBe(5);
+  });
+
+  it('legacy literal args still flow through unchanged', async () => {
+    // Old schemas store `{ min: 50, max: 60 }` directly (not ValueExprs).
+    // The engine must pass these through so persisted data keeps working.
+    const sch = schema([
+      {
+        name: 'price',
+        type: 'number',
+        required: false,
+        value: [
+          { kind: 'method', method: 'commerce.price', args: { min: 50, max: 60 } },
+        ],
+      },
+    ]);
+    for await (const row of generateRows(params(sch, 10))) {
+      const n = parseFloat((row as Record<string, string>)['price']!);
+      expect(n).toBeGreaterThanOrEqual(50);
+      expect(n).toBeLessThanOrEqual(60);
+    }
+  });
+
   it('emits __id with the salt:schemaKey:index pattern', async () => {
     const sch = schema([
       { name: 'id', type: 'string', required: false, value: [{ kind: 'method', method: 'string.uuid' }] },

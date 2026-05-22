@@ -1,9 +1,15 @@
 import { useMemo } from 'react';
+import { useParams } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
+import type { Api } from '@mirage/types';
+import { bff } from '../../../../api/client.js';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { validateTree, type ValidationIssue } from '../lib/validateTree.js';
 import { PropertyEditorRow, makeProp } from './PropertyEditorRow.js';
-import type { RefField } from './args/field-renderers/RefMentionInput.js';
+import { SegmentEditorProvider, type RefField } from './SegmentEditor.js';
+
+type CustomFunction = Api.components['schemas']['CustomFunction'];
 
 export interface PropertyEditorProps {
   rows: SchemaProp[];
@@ -31,7 +37,27 @@ export function PropertyEditor({
     return m;
   }, [liveIssues]);
 
+  // Fetch custom functions once at the editor root so every nested
+  // SegmentEditor (cell + each arg field) can list them without refetching.
+  const { wsId } = useParams<{ wsId: string }>();
+  const customFunctionsQ = useQuery({
+    enabled: Boolean(wsId),
+    queryKey: ['custom-functions', wsId, 'usage=valueGenerator'],
+    queryFn: async (): Promise<CustomFunction[]> => {
+      const { data, error } = await bff.GET('/workspaces/{wsId}/custom-functions', {
+        params: { path: { wsId: wsId! }, query: { usage: 'valueGenerator' } },
+      });
+      if (error) throw error;
+      return (data ?? []) as CustomFunction[];
+    },
+    staleTime: 30_000,
+  });
+
   return (
+    <SegmentEditorProvider
+      workspaceSchemas={workspaceSchemas}
+      customFunctions={customFunctionsQ.data ?? []}
+    >
     <div className="overflow-hidden rounded-lg border border-border bg-background">
       <div className="grid grid-cols-[20px_20px_minmax(140px,1fr)_140px_minmax(140px,1fr)_60px_28px] items-center gap-2 border-b border-border bg-muted px-2 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
         <span />
@@ -55,6 +81,7 @@ export function PropertyEditor({
         onSelectPath={onSelectPath}
       />
     </div>
+    </SegmentEditorProvider>
   );
 }
 

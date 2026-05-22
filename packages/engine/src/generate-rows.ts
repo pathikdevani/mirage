@@ -151,14 +151,63 @@ function stringifyForTemplate(v: unknown): string {
   return String(v);
 }
 
+const SEGMENT_KINDS = new Set(['text', 'field', 'method', 'ref', 'fn']);
+
+function isSegment(v: unknown): v is ValueSegment {
+  if (!v || typeof v !== 'object') return false;
+  const k = (v as { kind?: unknown }).kind;
+  return typeof k === 'string' && SEGMENT_KINDS.has(k);
+}
+
+function isValueExpr(v: unknown): v is ValueExpr {
+  return Array.isArray(v) && v.length > 0 && v.every(isSegment);
+}
+
+/**
+ * Resolve an arg value before passing it to faker. The editor stores arg slots
+ * as `ValueExpr` (or `ValueExpr[]` for `array`-kind params) so that any slot
+ * can reference a sibling field, an inline faker call, a cross-schema ref, or
+ * a custom function. Legacy literal arg values (numbers, strings, plain
+ * arrays/objects) are passed through unchanged so old schemas keep working.
+ */
+async function resolveArg(v: unknown, ctx: ResolvePropContext): Promise<unknown> {
+  if (isValueExpr(v)) {
+    if (v.length === 1) return evalSegment(v[0]!, ctx);
+    const parts: string[] = [];
+    for (const seg of v) {
+      parts.push(stringifyForTemplate(await evalSegment(seg, ctx)));
+    }
+    return parts.join('');
+  }
+  if (Array.isArray(v)) {
+    const out: unknown[] = [];
+    for (const item of v) out.push(await resolveArg(item, ctx));
+    return out;
+  }
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      out[k] = await resolveArg(val, ctx);
+    }
+    return out;
+  }
+  return v;
+}
+
 async function evalSegment(seg: ValueSegment, ctx: ResolvePropContext): Promise<unknown> {
   switch (seg.kind) {
     case 'text':
       return seg.text;
     case 'field':
       return resolveFieldByDottedPath(seg.name, ctx);
-    case 'method':
-      return ctx.fakerEngine.call(seg.method, seg.args as Parameters<typeof ctx.fakerEngine.call>[1]);
+    case 'method': {
+      const resolvedArgs =
+        seg.args === undefined ? undefined : await resolveArg(seg.args, ctx);
+      return ctx.fakerEngine.call(
+        seg.method,
+        resolvedArgs as Parameters<typeof ctx.fakerEngine.call>[1],
+      );
+    }
     case 'ref': {
       const ref: RefPlaceholder = {
         __ref: true,

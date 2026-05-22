@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import { createPortal } from 'react-dom';
 import { FAKER_CATALOG } from '@mirage/fakerjs';
 import { ArgsEditor } from './ArgsEditor.js';
-import type { RefField } from './field-renderers/RefMentionInput.js';
+import type { RefField } from '../SegmentEditor.js';
 import type { ArgsStored } from './serialize.js';
 
 export interface ArgsPopoverProps {

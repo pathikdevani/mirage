@@ -716,6 +716,11 @@ components:
           properties:
             kind: { type: string, enum: [method] }
             method: { type: string }
+            # Each named arg (or positional slot) may be a literal value, a
+            # nested ValueExpr (chip-based expression — `[{kind:'field',...}]`,
+            # etc.), or, for `array`-kind faker params, an array whose elements
+            # are themselves literals or ValueExprs. The engine recursively
+            # resolves expression-shaped values before invoking faker.
             args:
               oneOf:
                 - type: object

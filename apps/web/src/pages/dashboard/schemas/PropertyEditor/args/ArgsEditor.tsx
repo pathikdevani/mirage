@@ -1,22 +1,15 @@
 import { useEffect, useState } from 'react';
 import { FAKER_CATALOG, type MethodEntry, type Param } from '@mirage/fakerjs';
+import type { ValueExpr } from '@mirage/types';
+import type { RefField } from '../SegmentEditor.js';
 import {
-  IntegerField,
-  NumberField,
-  StringField,
-  BooleanField,
-  EnumField,
-  DateField,
   ArrayField,
-  RegexField,
+  BooleanField,
+  DateField,
+  EnumField,
+  ExpressionField,
 } from './field-renderers/index.js';
-import type { RefField } from './field-renderers/RefMentionInput.js';
-import {
-  toInternal,
-  toStored,
-  type ArgsInternal,
-  type ArgsStored,
-} from './serialize.js';
+import { toInternal, toStored, type ArgInternal, type ArgsInternal, type ArgsStored } from './serialize.js';
 import { validateArgs } from './validate.js';
 
 export interface ArgsEditorProps {
@@ -29,38 +22,68 @@ export interface ArgsEditorProps {
 
 function renderField(
   param: Param,
-  value: unknown,
-  onChange: (v: unknown) => void,
+  value: ArgInternal | undefined,
+  onChange: (v: ArgInternal | undefined) => void,
   invalid: boolean,
-  fields: RefField[] | undefined,
-  ownField: string | undefined,
+  fields: RefField[],
+  ownField: string,
 ) {
+  // Boolean/enum/date keep a custom affordance for the common "literal value"
+  // case; each also accepts an expression via the same SegmentEditor when the
+  // user types `@` or picks a chip.
   switch (param.kind) {
-    case 'integer':
-      return <IntegerField param={param} value={value} onChange={onChange as (v: number | undefined) => void} invalid={invalid} />;
-    case 'number':
-      return <NumberField param={param} value={value} onChange={onChange as (v: number | undefined) => void} invalid={invalid} />;
-    case 'string':
+    case 'array':
       return (
-        <StringField
+        <ArrayField
           param={param}
-          value={value}
-          onChange={onChange as (v: string | undefined) => void}
-          invalid={invalid}
-          {...(fields ? { fields } : {})}
-          {...(ownField !== undefined ? { ownField } : {})}
+          value={(value as ValueExpr[] | undefined) ?? []}
+          onChange={(v) => onChange(v && v.length > 0 ? v : undefined)}
+          fields={fields}
+          ownField={ownField}
         />
       );
     case 'boolean':
-      return <BooleanField param={param} value={value} onChange={onChange as (v: boolean | undefined) => void} />;
+      return (
+        <BooleanField
+          param={param}
+          value={value as ValueExpr | undefined}
+          onChange={onChange}
+          fields={fields}
+          ownField={ownField}
+        />
+      );
     case 'enum':
-      return <EnumField param={param} value={value} onChange={onChange as (v: string | undefined) => void} invalid={invalid} />;
+      return (
+        <EnumField
+          param={param}
+          value={value as ValueExpr | undefined}
+          onChange={onChange}
+          invalid={invalid}
+          fields={fields}
+          ownField={ownField}
+        />
+      );
     case 'date':
-      return <DateField param={param} value={value} onChange={onChange as (v: string | undefined) => void} />;
-    case 'array':
-      return <ArrayField param={param} value={value} onChange={onChange as (v: string[] | undefined) => void} />;
-    case 'regex':
-      return <RegexField param={param} value={value} onChange={onChange as (v: string | undefined) => void} />;
+      return (
+        <DateField
+          param={param}
+          value={value as ValueExpr | undefined}
+          onChange={onChange}
+          fields={fields}
+          ownField={ownField}
+        />
+      );
+    default:
+      return (
+        <ExpressionField
+          param={param}
+          value={value as ValueExpr | undefined}
+          onChange={onChange}
+          invalid={invalid}
+          fields={fields}
+          ownField={ownField}
+        />
+      );
   }
 }
 
@@ -109,9 +132,12 @@ export function ArgsEditor({ method, stored, onChange, fields, ownField }: ArgsE
 
   const validation = validateArgs(entry, internal);
 
-  const setParam = (name: string, val: unknown) => {
+  const setParam = (name: string, val: ArgInternal | undefined) => {
     const next = { ...internal };
-    if (val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
+    if (
+      val === undefined ||
+      (Array.isArray(val) && val.length === 0)
+    ) {
       delete next[name];
     } else {
       next[name] = val;
@@ -134,8 +160,8 @@ export function ArgsEditor({ method, stored, onChange, fields, ownField }: ArgsE
               internal[p.name],
               (v) => setParam(p.name, v),
               validation?.paramName === p.name,
-              fields,
-              ownField,
+              fields ?? [],
+              ownField ?? '',
             )}
           </div>
         ))}

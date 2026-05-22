@@ -6,7 +6,7 @@ import type { Schema, SchemaProp } from '../lib/types.js';
 import { TYPE_OPTIONS } from '../lib/types.js';
 import type { ValidationIssue } from '../lib/validateTree.js';
 import { FakerCell } from './FakerCell.js';
-import type { RefField } from './args/field-renderers/RefMentionInput.js';
+import type { RefField } from './SegmentEditor.js';
 import type { ValueExpr } from '@mirage/types';
 
 export interface PropertyEditorRowProps {
