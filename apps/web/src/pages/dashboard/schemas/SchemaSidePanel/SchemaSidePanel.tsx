@@ -42,7 +42,7 @@ export function SchemaSidePanel({
   const dry = useSchemaDryRun(wsId, draft, count);
 
   return (
-    <aside className="flex h-full flex-col bg-card">
+    <aside className="flex h-full min-w-0 flex-col bg-card">
       <div className="flex h-12 flex-none items-center gap-1 border-b border-border px-3">
         <TabButton active={tab === 'preview'} onClick={() => setTab('preview')}>
           Preview
@@ -59,7 +59,7 @@ export function SchemaSidePanel({
         </TabButton>
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 min-w-0 flex-1">
         {tab === 'preview' && (
           <PreviewTabContent
             draft={draft}

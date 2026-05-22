@@ -112,9 +112,9 @@ export function SchemaEditorShell({
     <div
       ref={containerRef}
       className="grid min-h-0 flex-1"
-      style={{ gridTemplateColumns: `1fr 6px ${sideWidth}px` }}
+      style={{ gridTemplateColumns: `minmax(0, 1fr) 6px ${sideWidth}px` }}
     >
-      <div className="min-h-0">
+      <div className="min-h-0 min-w-0">
         <EditPane
           schema={schema}
           buffer={buffer}
@@ -138,16 +138,18 @@ export function SchemaEditorShell({
       >
         <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border group-hover:bg-brand-violet/60" />
       </div>
-      <SchemaSidePanel
-        wsId={wsId}
-        draft={buffer.draft}
-        workspaceSchemas={workspaceSchemas}
-        selectedProp={selectedProp}
-        onPropChange={handlePropChange}
-        onDuplicate={handleDuplicate}
-        onRemove={handleRemove}
-        onClearSelection={() => setSelectedPath(null)}
-      />
+      <div className="min-w-0">
+        <SchemaSidePanel
+          wsId={wsId}
+          draft={buffer.draft}
+          workspaceSchemas={workspaceSchemas}
+          selectedProp={selectedProp}
+          onPropChange={handlePropChange}
+          onDuplicate={handleDuplicate}
+          onRemove={handleRemove}
+          onClearSelection={() => setSelectedPath(null)}
+        />
+      </div>
     </div>
   );
 }

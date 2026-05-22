@@ -26,7 +26,7 @@ export function PreviewTabContent({
   validationError,
 }: PreviewTabContentProps) {
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col">
       <div className="flex flex-none items-center justify-between border-b border-border px-4 py-2 text-[12px]">
         <div className="flex items-center gap-2 text-muted-foreground">
           <span>Rows</span>
@@ -100,7 +100,7 @@ interface SectionProps {
 function Section({ title, count, subtitle, defaultOpen = false, children }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-md border border-border bg-background/50">
+    <div className="min-w-0 rounded-md border border-border bg-background/50">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -111,7 +111,7 @@ function Section({ title, count, subtitle, defaultOpen = false, children }: Sect
         {subtitle && <span className="text-[11px] text-muted-foreground">· {subtitle}</span>}
         <span className="ml-auto text-[11px] text-muted-foreground">{count}</span>
       </button>
-      {open && <div className="border-t border-border px-3 py-2">{children}</div>}
+      {open && <div className="min-w-0 border-t border-border px-3 py-2">{children}</div>}
     </div>
   );
 }

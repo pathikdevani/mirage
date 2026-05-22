@@ -18,9 +18,11 @@ export function JsonNode({ value, name, depth = 0, initiallyOpen = true }: JsonN
 
   if (!collapsible) {
     return (
-      <div className="flex items-baseline gap-1.5 leading-5">
+      <div className="flex items-baseline gap-1.5 leading-5 min-w-0">
         {label && <>{label}<span className="text-muted-foreground">:</span></>}
-        <Scalar value={value} />
+        <div className="min-w-0 flex-1 break-all">
+          <Scalar value={value} />
+        </div>
       </div>
     );
   }
@@ -43,7 +45,7 @@ export function JsonNode({ value, name, depth = 0, initiallyOpen = true }: JsonN
         <span className="text-muted-foreground">{summary}</span>
       </button>
       {open && (
-        <div className="ml-3 border-l border-border/60 pl-2">
+        <div className="ml-3 border-l border-border/60 pl-2 min-w-0">
           {entries.map(([k, v]) => (
             <JsonNode key={k} name={k} value={v} depth={depth + 1} initiallyOpen={depth < 1} />
           ))}

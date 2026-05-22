@@ -333,14 +333,16 @@ export function FakerCell({
         onClick={onCellClick}
         className={cn(
           // `block` (not flex) so the browser treats this as a text flow and
-          // can compute caret positions natively. `leading-7` matches `h-7`
-          // so the chips' `align-middle` vertically centers them.
-          'block h-7 min-h-7 flex-1 rounded-md border bg-background px-2 text-[11.5px] leading-7 outline-none focus:ring-[2px] focus:ring-ring/10 overflow-hidden whitespace-nowrap',
+          // can compute caret positions natively. `min-h-7` (not `h-7`) lets
+          // the cell grow when chips wrap. `py-px` distributes the 2px
+          // remainder evenly (border 2 + padding 2 + leading 24 = 28 = h-7),
+          // so the line box is vertically centered instead of stuck at top.
+          'block min-h-7 flex-1 rounded-md border bg-background px-2 py-px text-[11.5px] leading-6 outline-none focus:ring-[2px] focus:ring-ring/10',
           invalid ? 'border-destructive focus:border-destructive' : 'border-input focus:border-ring',
         )}
       />
       {isEmpty && (
-        <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none italic text-muted-foreground">
+        <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 select-none text-[11.5px] text-muted-foreground">
           — type, or @ to insert —
         </div>
       )}
@@ -382,8 +384,12 @@ function makeChip(
   const span = document.createElement('span');
   span.contentEditable = 'false';
   span.dataset['kind'] = seg.kind;
+  // `mr-1` (not `mx-*`) so the first chip's left edge aligns with plain text
+  // (the cell's `px-2` is the only horizontal offset). `relative -top-px`
+  // nudges the chip up by 1px to compensate for `align-middle` aligning to
+  // text-middle rather than line-box-middle.
   span.className =
-    'inline-flex items-center gap-1 mx-0.5 rounded border px-1.5 py-0.5 align-middle font-mono text-[11px]';
+    'relative -top-px inline-flex items-center gap-1 mr-1 rounded border px-1.5 py-px align-middle font-mono text-[11px] leading-4';
 
   if (seg.kind === 'field') {
     span.dataset['name'] = seg.name;
