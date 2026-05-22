@@ -102,6 +102,36 @@ paths:
                 $ref: '#/components/schemas/Workspace'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+      summary: Delete a Workspace (cascade)
+      description: |
+        Soft-deletes the workspace immediately (sets `deletedAt`) and starts
+        an async cascade that cancels in-flight runs, purges every S3 object
+        under `org/{orgId}/workspace/{wsId}/`, and deletes every Mongo doc
+        scoped to this workspace. Caller must be an org owner.
+      operationId: deleteWorkspace
+      responses:
+        '202':
+          description: Accepted — soft delete written; cascade in progress
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, deletedAt]
+                additionalProperties: false
+                properties:
+                  id: { type: string }
+                  deletedAt: { type: string, format: date-time }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Workspace is already being deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /workspaces/{wsId}/schemas:
     parameters:
@@ -617,6 +647,14 @@ components:
         createdBy: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        deletedAt:
+          type: string
+          format: date-time
+          description: |
+            Set when the workspace is soft-deleted. While present, the row is
+            still returned by list/get but every sub-resource endpoint
+            responds 404. The row is hard-deleted (removed entirely) once the
+            background cascade finishes.
 
     CreateWorkspaceBody:
       type: object

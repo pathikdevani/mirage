@@ -45,7 +45,11 @@ export class BffClient {
       method: 'DELETE',
       headers: this.headers(),
     });
-    if (!res.ok && res.status !== 404) throw await asError(res, 'DELETE', path);
+    // 404 = already gone. 403 = caller is not an org owner (e2e users are
+    // JIT-provisioned as `editor`); cleanup is best-effort in that case.
+    if (!res.ok && res.status !== 404 && res.status !== 403) {
+      throw await asError(res, 'DELETE', path);
+    }
   }
 }
 

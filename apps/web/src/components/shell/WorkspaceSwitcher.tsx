@@ -43,7 +43,9 @@ export function WorkspaceSwitcher() {
     },
   });
 
-  const currentWorkspace = workspaces.data?.find((w) => w.id === wsIdFromUrl);
+  const currentWorkspace = workspaces.data?.find(
+    (w) => w.id === wsIdFromUrl && !w.deletedAt,
+  );
   const label = !currentOrgId
     ? 'Select org first'
     : currentWorkspace
@@ -96,13 +98,15 @@ export function WorkspaceSwitcher() {
                 Retry
               </button>
             </div>
-          ) : workspaces.data && workspaces.data.length === 0 ? (
+          ) : workspaces.data && workspaces.data.filter((w) => !w.deletedAt).length === 0 ? (
             <p className="mt-1 px-1 text-[12px] text-muted-foreground">
               No workspaces yet in this org.
             </p>
           ) : (
             <ul className="mt-1 flex flex-col">
-              {workspaces.data?.map((ws) => (
+              {workspaces.data
+                ?.filter((ws) => !ws.deletedAt)
+                .map((ws) => (
                 <li key={ws.id}>
                   <button
                     type="button"

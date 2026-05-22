@@ -53,4 +53,7 @@ export function registerWorkspaceProxyRoutes(app: FastifyInstance): void {
   app.get<{ Params: { id: string } }>('/workspaces/:id', (req, reply) =>
     forward(req, reply, `/workspaces/${encodeURIComponent(req.params.id)}`),
   );
+  app.delete<{ Params: { id: string } }>('/workspaces/:id', (req, reply) =>
+    forward(req, reply, `/workspaces/${encodeURIComponent(req.params.id)}`),
+  );
 }

@@ -13,4 +13,9 @@ export interface Workspace {
   createdBy: UserId;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Set when the workspace is soft-deleted; absent (and the row removed
+   * from Mongo entirely) once the cascade completes.
+   */
+  deletedAt?: string;
 }

@@ -47,7 +47,7 @@ export function registerRunRoutes(app: FastifyInstance, db: MirageDb): void {
       return null;
     }
     const ws = await db.workspaces.findOne({ id: asId<WorkspaceId>(wsId) });
-    if (!ws || ws.orgId !== auth.orgId) {
+    if (!ws || ws.orgId !== auth.orgId || ws.deletedAt) {
       await reply.code(404).send({ error: 'workspace not found' });
       return null;
     }

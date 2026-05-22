@@ -22,22 +22,26 @@ export function WorkspacesPage() {
       if (error) throw error;
       return data;
     },
+    // While any row is mid-cascade, poll so the row drops once the cascade
+    // hard-deletes it server-side.
+    refetchInterval: (query): number | false => {
+      const data = query.state.data as WorkspaceDto[] | undefined;
+      return data?.some((w) => w.deletedAt) ? 5000 : false;
+    },
   });
 
-  // Auto-select the most-recently-updated workspace when the list loads or
-  // when the current selection is no longer in the list (e.g. org switched).
+  // Auto-select the most-recently-updated non-deleted workspace.
   useEffect(() => {
-    if (!workspaces.data || workspaces.data.length === 0) {
+    const live = workspaces.data?.filter((w: WorkspaceDto) => !w.deletedAt) ?? [];
+    if (live.length === 0) {
       setSelectedId(null);
       return;
     }
-    if (selectedId && workspaces.data.some((w: WorkspaceDto) => w.id === selectedId)) return;
-    const first = workspaces.data[0];
-    if (first) setSelectedId(first.id);
+    if (selectedId && live.some((w) => w.id === selectedId)) return;
+    setSelectedId(live[0]!.id);
   }, [workspaces.data, selectedId]);
 
-  // Mirror the picker's selection into Zustand so the TopBar workspace switcher
-  // (post-pick) already knows which workspace is current.
+  // Mirror the picker's selection into Zustand.
   useEffect(() => {
     if (selectedId) setCurrentWorkspaceId(selectedId);
   }, [selectedId, setCurrentWorkspaceId]);

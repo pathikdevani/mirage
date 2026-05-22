@@ -14,23 +14,28 @@ interface WorkspaceRowProps {
 export function WorkspaceRow({ workspace, selected, onSelect }: WorkspaceRowProps) {
   const color = colorForId(workspace.id);
   const initials = initialsForName(workspace.name);
+  const deleting = Boolean(workspace.deletedAt);
 
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={deleting ? undefined : onSelect}
+      aria-disabled={deleting}
+      disabled={deleting}
       className={cn(
         'group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
-        selected
-          ? 'border-brand-violet/40 bg-brand-violet/5'
-          : 'border-border bg-background hover:border-brand-violet/30 hover:bg-accent',
+        deleting
+          ? 'cursor-not-allowed border-border bg-muted/40 opacity-60'
+          : selected
+            ? 'border-brand-violet/40 bg-brand-violet/5'
+            : 'border-border bg-background hover:border-brand-violet/30 hover:bg-accent',
       )}
     >
       <span
         className={cn(
           'flex h-10 w-10 flex-none items-center justify-center rounded-lg text-[12px] font-semibold',
-          color.bg,
-          color.fg,
+          deleting ? 'bg-muted text-muted-foreground' : color.bg,
+          deleting ? '' : color.fg,
         )}
       >
         {initials}
@@ -38,15 +43,30 @@ export function WorkspaceRow({ workspace, selected, onSelect }: WorkspaceRowProp
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[14px] font-medium text-foreground">
+          <span
+            className={cn(
+              'truncate text-[14px] font-medium',
+              deleting ? 'text-muted-foreground' : 'text-foreground',
+            )}
+          >
             {workspace.name}
           </span>
-          <span className="flex h-[18px] items-center gap-1 rounded-full bg-brand-emerald/10 px-1.5 text-[10px] font-medium text-brand-emerald">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand-emerald" />
-            dev
-          </span>
+          {deleting ? (
+            <span className="flex h-[18px] items-center gap-1 rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
+              Deleting…
+            </span>
+          ) : (
+            <span className="flex h-[18px] items-center gap-1 rounded-full bg-brand-emerald/10 px-1.5 text-[10px] font-medium text-brand-emerald">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-emerald" />
+              dev
+            </span>
+          )}
         </div>
-        {workspace.description ? (
+        {deleting ? (
+          <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+            Cleaning up data — this can take a moment.
+          </p>
+        ) : workspace.description ? (
           <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
             {workspace.description}
           </p>
@@ -57,14 +77,16 @@ export function WorkspaceRow({ workspace, selected, onSelect }: WorkspaceRowProp
         )}
       </div>
 
-      <ArrowRight
-        size={16}
-        strokeWidth={1.75}
-        className={cn(
-          'flex-none text-muted-foreground transition-colors',
-          selected ? 'text-brand-violet' : 'group-hover:text-foreground',
-        )}
-      />
+      {!deleting && (
+        <ArrowRight
+          size={16}
+          strokeWidth={1.75}
+          className={cn(
+            'flex-none text-muted-foreground transition-colors',
+            selected ? 'text-brand-violet' : 'group-hover:text-foreground',
+          )}
+        />
+      )}
     </button>
   );
 }
