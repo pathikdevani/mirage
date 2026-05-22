@@ -14,7 +14,7 @@
 
 import { parentPort } from 'node:worker_threads';
 import vm from 'node:vm';
-import { Faker, allLocales } from '@faker-js/faker';
+import { Faker, allLocales } from '@mirage/fakerjs';
 import type { SandboxMessageFromWorker, SandboxMessageToWorker } from './protocol.js';
 
 if (!parentPort) {

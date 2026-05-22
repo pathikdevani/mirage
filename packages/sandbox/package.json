@@ -10,7 +10,7 @@
     "./worker": "./src/worker.ts"
   },
   "dependencies": {
-    "@faker-js/faker": "9.3.0",
+    "@mirage/fakerjs": "workspace:*",
     "@mirage/types": "workspace:*"
   },
   "nx": {

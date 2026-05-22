@@ -272,9 +272,9 @@ importers:
 
   packages/engine:
     dependencies:
-      '@faker-js/faker':
-        specifier: 9.3.0
-        version: 9.3.0
+      '@mirage/fakerjs':
+        specifier: workspace:*
+        version: link:../fakerjs
       '@mirage/sandbox':
         specifier: workspace:*
         version: link:../sandbox
@@ -304,9 +304,9 @@ importers:
 
   packages/sandbox:
     dependencies:
-      '@faker-js/faker':
-        specifier: 9.3.0
-        version: 9.3.0
+      '@mirage/fakerjs':
+        specifier: workspace:*
+        version: link:../fakerjs
       '@mirage/types':
         specifier: workspace:*
         version: link:../types

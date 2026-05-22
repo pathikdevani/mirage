@@ -10,3 +10,5 @@
 export { FAKER_GROUPS, type FakerGroup } from './registry.generated.js';
 export { FAKER_CATALOG } from './catalog.generated.js';
 export type { ParamKind, Param, MethodEntry, FakerCatalog } from './types.js';
+
+export * from '@faker-js/faker';

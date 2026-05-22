@@ -1,4 +1,4 @@
-import { Faker, allLocales, type LocaleDefinition } from '@faker-js/faker';
+import { Faker, allLocales, type LocaleDefinition } from '@mirage/fakerjs';
 import { EngineError } from './errors.js';
 
 /**
