@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -472,6 +473,13 @@ interface SegmentPickerProps {
   onClose: () => void;
 }
 
+interface PickItem {
+  key: string;
+  section: string;
+  seg: ValueSegment;
+  render: () => React.ReactNode;
+}
+
 function SegmentPicker({
   rect,
   query: initialQuery,
@@ -484,7 +492,9 @@ function SegmentPicker({
 }: SegmentPickerProps) {
   const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
   const [q, setQ] = useState(initialQuery);
+  const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useLayoutEffect(() => {
     const w = 360;
@@ -492,32 +502,146 @@ function SegmentPicker({
     setPos({ left, top: rect.bottom + 4, width: w });
   }, [rect]);
 
+  // Focus once `pos` is set — the first render returns null (waiting for
+  // `pos`), so an empty-deps effect would fire before the input exists.
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (pos) inputRef.current?.focus();
+  }, [pos]);
   useEffect(() => {
     setQ(initialQuery);
   }, [initialQuery]);
 
-  const lower = q.trim().toLowerCase();
-  const filteredFields = lower
-    ? siblingFields.filter((f) => f.name !== ownFieldName && f.name.toLowerCase().includes(lower))
-    : siblingFields.filter((f) => f.name !== ownFieldName);
-  const filteredRefs = lower
-    ? refOptions.filter(
-        (r) => r.key.toLowerCase().includes(lower) || r.field.toLowerCase().includes(lower),
-      )
-    : refOptions;
-  const filteredMethods = lower
-    ? FAKER_GROUPS.flatMap((g) =>
-        g.methods
-          .filter((m) => m.toLowerCase().includes(lower) || g.ns.toLowerCase().includes(lower))
-          .map((m) => ({ ns: g.ns, method: m })),
-      )
-    : FAKER_GROUPS.flatMap((g) => g.methods.map((m) => ({ ns: g.ns, method: m })));
-  const filteredFns = lower
-    ? customFunctions.filter((f) => f.name.toLowerCase().includes(lower))
-    : customFunctions;
+  const items = useMemo<PickItem[]>(() => {
+    const lower = q.trim().toLowerCase();
+    const out: PickItem[] = [];
+
+    const fields = lower
+      ? siblingFields.filter((f) => f.name !== ownFieldName && f.name.toLowerCase().includes(lower))
+      : siblingFields.filter((f) => f.name !== ownFieldName);
+    for (const f of fields) {
+      out.push({
+        key: `field-${f.name}`,
+        section: 'Fields',
+        seg: { kind: 'field', name: f.name },
+        render: () => (
+          <>
+            <span className={cn('h-1.5 w-1.5 rounded-sm', TYPE_DOT[f.type] ?? 'bg-brand-violet/50')} />
+            <span className="font-mono">{f.name}</span>
+            <span className="ml-auto truncate font-mono text-[10.5px] text-muted-foreground">{f.type}</span>
+          </>
+        ),
+      });
+    }
+
+    const methods = lower
+      ? FAKER_GROUPS.flatMap((g) =>
+          g.methods
+            .filter((m) => m.toLowerCase().includes(lower) || g.ns.toLowerCase().includes(lower))
+            .map((m) => ({ ns: g.ns, method: m })),
+        )
+      : FAKER_GROUPS.flatMap((g) => g.methods.map((m) => ({ ns: g.ns, method: m })));
+    for (const { ns, method } of methods.slice(0, 200)) {
+      out.push({
+        key: `method-${ns}.${method}`,
+        section: 'Faker methods',
+        seg: { kind: 'method', method: `${ns}.${method}` },
+        render: () => (
+          <>
+            <span className="rounded bg-brand-violet/10 px-1 py-0 font-mono text-[10px] text-brand-violet">
+              {ns}
+            </span>
+            <span className="font-mono">.{method}</span>
+          </>
+        ),
+      });
+    }
+
+    const refs = lower
+      ? refOptions.filter(
+          (r) => r.key.toLowerCase().includes(lower) || r.field.toLowerCase().includes(lower),
+        )
+      : refOptions;
+    for (const r of refs) {
+      out.push({
+        key: `ref-${r.key}.${r.field}`,
+        section: 'Cross-schema refs',
+        seg: { kind: 'ref', target: `${r.key}.${r.field}` },
+        render: () => (
+          <>
+            <Link2 size={11} className="text-brand-violet" />
+            <span className="font-mono">
+              <b>{r.key}</b>
+              <span className="text-muted-foreground">.</span>
+              {r.field}
+            </span>
+            <span className="ml-auto rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
+              {r.type}
+            </span>
+          </>
+        ),
+      });
+    }
+
+    const fns = lower
+      ? customFunctions.filter((f) => f.name.toLowerCase().includes(lower))
+      : customFunctions;
+    for (const f of fns) {
+      out.push({
+        key: `fn-${f.id}`,
+        section: 'Custom functions',
+        seg: { kind: 'fn', id: f.id },
+        render: () => (
+          <>
+            <Code2 size={11} className="text-brand-emerald" />
+            <span className="font-mono">{f.name}</span>
+            <span className="ml-auto rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
+              {f.usage}
+            </span>
+          </>
+        ),
+      });
+    }
+
+    return out;
+  }, [q, siblingFields, ownFieldName, refOptions, customFunctions]);
+
+  // Clamp active index when the result set shrinks; resetting to 0 on every
+  // keystroke would fight the user who is arrowing through results.
+  useEffect(() => {
+    setActiveIndex((i) => (items.length === 0 ? 0 : Math.min(i, items.length - 1)));
+  }, [items.length]);
+
+  // Keep the active item scrolled into view as the user arrows through.
+  useEffect(() => {
+    itemRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
+  // Listen at the document level so navigation keys work no matter what is
+  // focused — the contentEditable cell often steals focus back from the
+  // picker's input, which would otherwise swallow ArrowDown/Enter/etc.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (items.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveIndex((i) => (i + 1) % items.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveIndex((i) => (i - 1 + items.length) % items.length);
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const item = items[activeIndex];
+        if (item) onPick(item.seg);
+      }
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [items, activeIndex, onClose, onPick]);
 
   if (!pos) return null;
   return createPortal(
@@ -542,106 +666,49 @@ function SegmentPicker({
           </kbd>
         </div>
         <div className="max-h-[320px] overflow-y-auto py-1">
-          {filteredFields.length > 0 && (
-            <>
-              <SectionHeader>Fields</SectionHeader>
-              {filteredFields.map((f) => (
-                <button
-                  key={`field-${f.name}`}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onPick({ kind: 'field', name: f.name });
-                  }}
-                  className="flex w-full items-center gap-2 px-2.5 py-1 text-left text-[12px] hover:bg-accent"
-                >
-                  <span className={cn('h-1.5 w-1.5 rounded-sm', TYPE_DOT[f.type] ?? 'bg-brand-violet/50')} />
-                  <span className="font-mono">{f.name}</span>
-                  <span className="ml-auto truncate font-mono text-[10.5px] text-muted-foreground">{f.type}</span>
-                </button>
-              ))}
-            </>
+          {items.length === 0 ? (
+            <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
+              No matches
+            </div>
+          ) : (
+            items.map((item, idx) => {
+              const showHeader = idx === 0 || items[idx - 1]!.section !== item.section;
+              const isActive = idx === activeIndex;
+              return (
+                <Fragment key={item.key}>
+                  {showHeader && <SectionHeader>{item.section}</SectionHeader>}
+                  <button
+                    ref={(el) => {
+                      itemRefs.current[idx] = el;
+                    }}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onPick(item.seg);
+                    }}
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    className={cn(
+                      'flex w-full items-center gap-2 px-2.5 py-1 text-left text-[12px]',
+                      isActive ? 'bg-accent' : 'hover:bg-accent',
+                    )}
+                  >
+                    {item.render()}
+                  </button>
+                </Fragment>
+              );
+            })
           )}
-          {filteredMethods.length > 0 && (
-            <>
-              <SectionHeader>Faker methods</SectionHeader>
-              {filteredMethods.slice(0, 200).map(({ ns, method }) => (
-                <button
-                  key={`method-${ns}.${method}`}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onPick({ kind: 'method', method: `${ns}.${method}` });
-                  }}
-                  className="flex w-full items-center gap-2 px-2.5 py-1 text-left text-[12px] hover:bg-accent"
-                >
-                  <span className="rounded bg-brand-violet/10 px-1 py-0 font-mono text-[10px] text-brand-violet">
-                    {ns}
-                  </span>
-                  <span className="font-mono">.{method}</span>
-                </button>
-              ))}
-            </>
-          )}
-          {filteredRefs.length > 0 && (
-            <>
-              <SectionHeader>Cross-schema refs</SectionHeader>
-              {filteredRefs.map((r) => (
-                <button
-                  key={`ref-${r.key}.${r.field}`}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onPick({ kind: 'ref', target: `${r.key}.${r.field}` });
-                  }}
-                  className="flex w-full items-center gap-2 px-2.5 py-1 text-left text-[12px] hover:bg-accent"
-                >
-                  <Link2 size={11} className="text-brand-violet" />
-                  <span className="font-mono">
-                    <b>{r.key}</b>
-                    <span className="text-muted-foreground">.</span>
-                    {r.field}
-                  </span>
-                  <span className="ml-auto rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
-                    {r.type}
-                  </span>
-                </button>
-              ))}
-            </>
-          )}
-          {filteredFns.length > 0 && (
-            <>
-              <SectionHeader>Custom functions</SectionHeader>
-              {filteredFns.map((f) => (
-                <button
-                  key={`fn-${f.id}`}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onPick({ kind: 'fn', id: f.id });
-                  }}
-                  className="flex w-full items-center gap-2 px-2.5 py-1 text-left text-[12px] hover:bg-accent"
-                >
-                  <Code2 size={11} className="text-brand-emerald" />
-                  <span className="font-mono">{f.name}</span>
-                  <span className="ml-auto rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
-                    {f.usage}
-                  </span>
-                </button>
-              ))}
-            </>
-          )}
-          {filteredFields.length === 0 &&
-            filteredMethods.length === 0 &&
-            filteredRefs.length === 0 &&
-            filteredFns.length === 0 && (
-              <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
-                No matches
-              </div>
-            )}
         </div>
-        <div className="border-t border-border bg-muted/40 px-2.5 py-1 text-[10px] text-muted-foreground">
-          <span className="font-mono">esc</span> close
+        <div className="flex items-center gap-3 border-t border-border bg-muted/40 px-2.5 py-1 text-[10px] text-muted-foreground">
+          <span>
+            <span className="font-mono">↑↓</span> navigate
+          </span>
+          <span>
+            <span className="font-mono">↵</span> select
+          </span>
+          <span className="ml-auto">
+            <span className="font-mono">esc</span> close
+          </span>
         </div>
       </div>
     </>,
