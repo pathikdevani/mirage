@@ -6,6 +6,7 @@ import type { Schema, SchemaProp } from '../lib/types.js';
 import { TYPE_OPTIONS } from '../lib/types.js';
 import type { ValidationIssue } from '../lib/validateTree.js';
 import { FakerCell } from './FakerCell.js';
+import type { ArgsStored } from './args/serialize.js';
 
 export interface PropertyEditorRowProps {
   row: SchemaProp;
@@ -138,11 +139,12 @@ export function PropertyEditorRow({
         ) : (
           <FakerCell
             value={row.faker ?? ''}
-            onChange={(v) =>
+            onChange={(v, opts) =>
               updateRow((r) => {
                 const next: SchemaProp = { ...r };
                 if (v) next.faker = v;
                 else delete next.faker;
+                if (opts?.clearArgs) delete (next as { fakerArgs?: unknown }).fakerArgs;
                 return next;
               })
             }
@@ -150,6 +152,15 @@ export function PropertyEditorRow({
             onToggle={togglePicker}
             workspaceSchemas={workspaceSchemas}
             invalid={error?.kind === 'ref_target_missing'}
+            fakerArgs={(row as { fakerArgs?: ArgsStored }).fakerArgs}
+            onFakerArgsChange={(next) =>
+              updateRow((r) => {
+                const updated: SchemaProp = { ...r };
+                if (next === undefined) delete (updated as { fakerArgs?: unknown }).fakerArgs;
+                else (updated as { fakerArgs?: unknown }).fakerArgs = next;
+                return updated;
+              })
+            }
           />
         )}
 

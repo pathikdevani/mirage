@@ -9,10 +9,16 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@faker-js/faker": "^9.3.0"
+    "@faker-js/faker": "9.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
   },
   "scripts": {
-    "generate": "node scripts/generate-registry.mjs"
+    "generate": "node scripts/generate-registry.mjs",
+    "test": "vitest run"
   },
   "nx": {
     "name": "@mirage/fakerjs",
@@ -35,6 +41,13 @@
         "executor": "nx:run-commands",
         "options": {
           "command": "node scripts/generate-registry.mjs",
+          "cwd": "packages/fakerjs"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run",
           "cwd": "packages/fakerjs"
         }
       }

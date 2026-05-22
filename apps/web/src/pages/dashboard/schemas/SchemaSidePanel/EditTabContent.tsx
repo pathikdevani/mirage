@@ -4,6 +4,7 @@ import { cn } from '@mirage/ui-kit';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { TYPE_OPTIONS } from '../lib/types.js';
 import { FakerCell } from '../PropertyEditor/FakerCell.js';
+import type { ArgsStored } from '../PropertyEditor/args/serialize.js';
 import { applyTypeChange } from '../PropertyEditor/PropertyEditorRow.js';
 
 export interface EditTabContentProps {
@@ -74,16 +75,27 @@ export function EditTabContent({
             <Field label="Faker / $ref">
               <FakerCell
                 value={prop.faker ?? ''}
-                onChange={(v) => {
+                onChange={(v, opts) => {
                   const next: SchemaProp = { ...prop };
                   if (v) next.faker = v;
                   else delete next.faker;
+                  if (opts?.clearArgs) delete (next as { fakerArgs?: unknown }).fakerArgs;
                   onChange(next);
                 }}
                 open={pickerOpen}
                 onToggle={() => setPickerOpen((v) => !v)}
                 workspaceSchemas={workspaceSchemas}
                 invalid={false}
+                fakerArgs={(prop as { fakerArgs?: ArgsStored }).fakerArgs}
+                onFakerArgsChange={(nextArgs) => {
+                  const next: SchemaProp = { ...prop };
+                  if (nextArgs === undefined) {
+                    delete (next as { fakerArgs?: unknown }).fakerArgs;
+                  } else {
+                    (next as { fakerArgs?: unknown }).fakerArgs = nextArgs;
+                  }
+                  onChange(next);
+                }}
               />
             </Field>
           )}

@@ -123,5 +123,5 @@ async function resolveProp(p: SchemaProp, ctx: ResolvePropContext): Promise<unkn
     };
     return ctx.sandbox.invoke(entry.source, callerCtx);
   }
-  return ctx.fakerEngine.call(p.faker);
+  return ctx.fakerEngine.call(p.faker, p.fakerArgs);
 }

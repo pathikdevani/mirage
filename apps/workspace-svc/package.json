@@ -16,7 +16,11 @@
     "nanoid": "^5.0.9"
   },
   "devDependencies": {
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8"
+  },
+  "scripts": {
+    "test": "vitest run"
   },
   "nx": {
     "name": "@mirage/workspace-svc",
@@ -39,6 +43,13 @@
         "executor": "nx:run-commands",
         "options": {
           "command": "eslint src",
+          "cwd": "apps/workspace-svc"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run",
           "cwd": "apps/workspace-svc"
         }
       }

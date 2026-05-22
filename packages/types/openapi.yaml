@@ -640,6 +640,17 @@ components:
           enum: [uuid, email, date, date-time]
         required: { type: boolean }
         faker: { type: string }
+        fakerArgs:
+          description: |
+            Arguments passed to the faker method. Object for `shape: 'options'`
+            methods (e.g. `{ min: 10, max: 100 }`), array for positional
+            methods (e.g. `['female']`). Only valid when `faker` is set to a
+            faker method (not `$ref:` or `$fn:`).
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: array
+              items: {}
         fields:
           type: array
           items:

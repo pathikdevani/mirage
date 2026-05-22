@@ -61,6 +61,31 @@ describe('generateRows', () => {
     expect(n).toBe(7);
   });
 
+  it('forwards fakerArgs to the faker method', async () => {
+    const sch = schema([
+      {
+        name: 'price',
+        type: 'number',
+        faker: 'commerce.price',
+        required: false,
+        fakerArgs: { min: 50, max: 60 },
+      } as Api.components['schemas']['SchemaProp'],
+    ]);
+    const params = {
+      schema: sch,
+      count: 20,
+      salt: 'salt',
+      locale: 'en',
+      customFunctions: customFunctionRegistryFromMap(new Map()),
+      sandbox: fakeSandbox,
+    };
+    for await (const row of generateRows(params)) {
+      const n = parseFloat((row as Record<string, string>)['price']!);
+      expect(n).toBeGreaterThanOrEqual(50);
+      expect(n).toBeLessThanOrEqual(60);
+    }
+  });
+
   it('emits __id with the salt:schemaKey:index pattern', async () => {
     const sch = schema([{ name: 'id', type: 'string', faker: 'string.uuid', required: false }]);
     const ids: string[] = [];

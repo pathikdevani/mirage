@@ -42,6 +42,8 @@ function err(code: string, message: string, detail?: unknown): ValidationError {
   return detail === undefined ? { code, message } : { code, message, detail };
 }
 
+import { validateFakerArgs } from './validate-faker-args.js';
+
 function validateProps(properties: SchemaProp[]): ValidationError | null {
   if (!Array.isArray(properties) || properties.length === 0) {
     return err('properties_empty', 'At least one property is required.');
@@ -60,6 +62,9 @@ function validateProps(properties: SchemaProp[]): ValidationError | null {
         });
       }
       seen.add(p.name);
+
+      const fakerArgsErr = validateFakerArgs(p);
+      if (fakerArgsErr) return fakerArgsErr;
 
       if (p.type === 'object') {
         if (Array.isArray(p.fields)) queue.push({ props: p.fields });

@@ -26,7 +26,11 @@
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  },
+  "scripts": {
+    "test": "vitest run"
   },
   "nx": {
     "name": "@mirage/web",
@@ -56,6 +60,13 @@
         "executor": "nx:run-commands",
         "options": {
           "command": "eslint src",
+          "cwd": "apps/web"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run",
           "cwd": "apps/web"
         }
       }

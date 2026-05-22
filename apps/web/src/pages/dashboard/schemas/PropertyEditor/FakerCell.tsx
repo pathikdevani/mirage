@@ -8,16 +8,20 @@ import type { Api } from '@mirage/types';
 import { bff } from '../../../../api/client.js';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { FAKER_GROUPS, FN_PREFIX, REF_PREFIX } from '../lib/types.js';
+import { ArgsChip } from './args/ArgsChip.js';
+import type { ArgsStored } from './args/serialize.js';
 
 type CustomFunction = Api.components['schemas']['CustomFunction'];
 
 export interface FakerCellProps {
   value: string;
-  onChange: (v: string) => void;
+  onChange: (v: string, opts?: { clearArgs?: boolean }) => void;
   open: boolean;
   onToggle: () => void;
   workspaceSchemas: Schema[];
   invalid: boolean;
+  fakerArgs: ArgsStored | undefined;
+  onFakerArgsChange: (next: ArgsStored | undefined) => void;
 }
 
 export function FakerCell({
@@ -27,6 +31,8 @@ export function FakerCell({
   onToggle,
   workspaceSchemas,
   invalid,
+  fakerArgs,
+  onFakerArgsChange,
 }: FakerCellProps) {
   const { wsId } = useParams<{ wsId: string }>();
   const isRef = value.startsWith(REF_PREFIX);
@@ -131,13 +137,13 @@ export function FakerCell({
     : (customFunctions.data ?? []);
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-1">
       <button
         ref={triggerRef}
         type="button"
         onClick={onToggle}
         className={cn(
-          'flex h-7 w-full items-center gap-1.5 rounded-md border bg-background px-2 text-left text-[11.5px]',
+          'flex h-7 flex-1 items-center gap-1.5 rounded-md border bg-background px-2 text-left text-[11.5px]',
           invalid ? 'border-destructive' : 'border-input',
         )}
       >
@@ -165,6 +171,7 @@ export function FakerCell({
         )}
         <ChevronDown size={11} className="ml-auto flex-none text-muted-foreground" />
       </button>
+      <ArgsChip method={value} stored={fakerArgs} onChange={onFakerArgsChange} />
       {open && pos && createPortal(
         <>
           <div className="fixed inset-0 z-30" onClick={onToggle} />
@@ -200,7 +207,7 @@ export function FakerCell({
                       key={f.id}
                       type="button"
                       onClick={() => {
-                        onChange(`${FN_PREFIX}${f.id}`);
+                        onChange(`${FN_PREFIX}${f.id}`, { clearArgs: true });
                         onToggle();
                       }}
                       className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11.5px] hover:bg-accent"
@@ -224,7 +231,7 @@ export function FakerCell({
                       key={`${r.key}.${r.field}`}
                       type="button"
                       onClick={() => {
-                        onChange(`${REF_PREFIX}${r.key}.${r.field}`);
+                        onChange(`${REF_PREFIX}${r.key}.${r.field}`, { clearArgs: true });
                         onToggle();
                       }}
                       className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11.5px] hover:bg-accent"
@@ -257,7 +264,7 @@ export function FakerCell({
                           key={`${g.ns}.${m}`}
                           type="button"
                           onClick={() => {
-                            onChange(`${g.ns}.${m}`);
+                            onChange(`${g.ns}.${m}`, { clearArgs: true });
                             onToggle();
                           }}
                           className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11.5px] hover:bg-accent"

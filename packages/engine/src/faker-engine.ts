@@ -11,8 +11,8 @@ import { EngineError } from './errors.js';
 export interface FakerEngine {
   /** Reseed faker before generating rows for a Schema. */
   seed(n: number): void;
-  /** Invoke `faker.<ns>.<method>()` by dotted-path. */
-  call(method: string): unknown;
+  /** Invoke `faker.<ns>.<method>(...args)` by dotted-path. */
+  call(method: string, args?: unknown): unknown;
   /** Exposed for Custom Functions' `ctx.faker`. */
   faker: Faker;
   /** Whether the requested locale was honored (vs. fallback to en). */
@@ -31,7 +31,7 @@ export function createFakerEngine(locale: string): FakerEngine {
     seed(n: number): void {
       faker.seed(n);
     },
-    call(method: string): unknown {
+    call(method: string, args?: unknown): unknown {
       const segments = method.split('.');
       if (segments.length < 2) {
         throw new EngineError('unknown_faker_method', { method });
@@ -49,8 +49,13 @@ export function createFakerEngine(locale: string): FakerEngine {
       if (typeof fn !== 'function') {
         throw new EngineError('unknown_faker_method', { method });
       }
+      const callArgs = Array.isArray(args)
+        ? args
+        : args !== undefined && args !== null
+          ? [args]
+          : [];
       try {
-        return (fn as () => unknown).call(cursor);
+        return (fn as (...a: unknown[]) => unknown).call(cursor, ...callArgs);
       } catch (e) {
         throw new EngineError('faker_call_failed', {
           method,
