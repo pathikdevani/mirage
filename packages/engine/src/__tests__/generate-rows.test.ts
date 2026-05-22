@@ -6,8 +6,9 @@ import { resolveSchema } from '../resolve-schema.js';
 import { customFunctionRegistryFromMap } from '../custom-function-registry.js';
 
 type Schema = Api.components['schemas']['Schema'];
+type SchemaProp = Api.components['schemas']['SchemaProp'];
 
-const schema = (props: Api.components['schemas']['SchemaProp'][]): Schema =>
+const schema = (props: SchemaProp[]): Schema =>
   ({
     id: 'sch_x',
     workspaceId: 'ws_1',
@@ -26,60 +27,52 @@ const schema = (props: Api.components['schemas']['SchemaProp'][]): Schema =>
 
 const fakeSandbox = { invoke: async () => null } as unknown as SandboxPool;
 
+const params = (sch: Schema, count = 1) => ({
+  schema: sch,
+  count,
+  salt: 'salt',
+  locale: 'en',
+  customFunctions: customFunctionRegistryFromMap(new Map()),
+  sandbox: fakeSandbox,
+});
+
+const drain = async (sch: Schema, count = 1): Promise<Record<string, unknown>[]> => {
+  const out: Record<string, unknown>[] = [];
+  for await (const r of generateRows(params(sch, count))) out.push(r as Record<string, unknown>);
+  return out;
+};
+
 describe('generateRows', () => {
   it('produces the same rows as resolveSchema for the same inputs', async () => {
     const sch = schema([
-      { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-      { name: 'name', type: 'string', faker: 'person.firstName', required: false },
+      { name: 'id', type: 'string', required: false, value: [{ kind: 'method', method: 'string.uuid' }] },
+      { name: 'name', type: 'string', required: false, value: [{ kind: 'method', method: 'person.firstName' }] },
     ]);
-    const params = {
-      schema: sch,
-      count: 4,
-      salt: 'salt',
-      locale: 'en',
-      customFunctions: customFunctionRegistryFromMap(new Map()),
-      sandbox: fakeSandbox,
-    };
     const fromIterator: unknown[] = [];
-    for await (const row of generateRows(params)) fromIterator.push(row);
-    const fromArray = await resolveSchema(params);
+    for await (const row of generateRows(params(sch, 4))) fromIterator.push(row);
+    const fromArray = await resolveSchema(params(sch, 4));
     expect(fromIterator).toEqual(fromArray);
   });
 
   it('yields exactly count rows', async () => {
-    const sch = schema([{ name: 'id', type: 'string', faker: 'string.uuid', required: false }]);
-    const params = {
-      schema: sch,
-      count: 7,
-      salt: 'salt',
-      locale: 'en',
-      customFunctions: customFunctionRegistryFromMap(new Map()),
-      sandbox: fakeSandbox,
-    };
+    const sch = schema([
+      { name: 'id', type: 'string', required: false, value: [{ kind: 'method', method: 'string.uuid' }] },
+    ]);
     let n = 0;
-    for await (const _row of generateRows(params)) n++;
+    for await (const _row of generateRows(params(sch, 7))) n++;
     expect(n).toBe(7);
   });
 
-  it('forwards fakerArgs to the faker method', async () => {
+  it('forwards method-segment args to the faker method', async () => {
     const sch = schema([
       {
         name: 'price',
         type: 'number',
-        faker: 'commerce.price',
         required: false,
-        fakerArgs: { min: 50, max: 60 },
-      } as Api.components['schemas']['SchemaProp'],
+        value: [{ kind: 'method', method: 'commerce.price', args: { min: 50, max: 60 } }],
+      },
     ]);
-    const params = {
-      schema: sch,
-      count: 20,
-      salt: 'salt',
-      locale: 'en',
-      customFunctions: customFunctionRegistryFromMap(new Map()),
-      sandbox: fakeSandbox,
-    };
-    for await (const row of generateRows(params)) {
+    for await (const row of generateRows(params(sch, 20))) {
       const n = parseFloat((row as Record<string, string>)['price']!);
       expect(n).toBeGreaterThanOrEqual(50);
       expect(n).toBeLessThanOrEqual(60);
@@ -87,18 +80,112 @@ describe('generateRows', () => {
   });
 
   it('emits __id with the salt:schemaKey:index pattern', async () => {
-    const sch = schema([{ name: 'id', type: 'string', faker: 'string.uuid', required: false }]);
+    const sch = schema([
+      { name: 'id', type: 'string', required: false, value: [{ kind: 'method', method: 'string.uuid' }] },
+    ]);
     const ids: string[] = [];
     for await (const row of generateRows({
-      schema: sch,
-      count: 3,
+      ...params(sch, 3),
       salt: 'S',
-      locale: 'en',
-      customFunctions: customFunctionRegistryFromMap(new Map()),
-      sandbox: fakeSandbox,
     })) {
       ids.push(row.__id);
     }
     expect(ids).toEqual(['S:x:0', 'S:x:1', 'S:x:2']);
+  });
+});
+
+describe('value-template evaluation', () => {
+  it('a single text segment returns the literal', async () => {
+    const sch = schema([
+      { name: 'fixed', type: 'string', required: true, value: [{ kind: 'text', text: 'hello' }] },
+    ]);
+    const [row] = await drain(sch);
+    expect(row!['fixed']).toBe('hello');
+  });
+
+  it('a single method segment preserves the native type', async () => {
+    const sch = schema([
+      {
+        name: 'n',
+        type: 'integer',
+        required: true,
+        value: [{ kind: 'method', method: 'number.int', args: { min: 1, max: 1 } }],
+      },
+    ]);
+    const [row] = await drain(sch);
+    expect(row!['n']).toBe(1);
+  });
+
+  it('multi-segment templates stringify and concatenate', async () => {
+    const sch = schema([
+      { name: 'fname', type: 'string', required: true, value: [{ kind: 'text', text: 'Ada' }] },
+      { name: 'lname', type: 'string', required: true, value: [{ kind: 'text', text: 'Lovelace' }] },
+      {
+        name: 'email',
+        type: 'string',
+        required: true,
+        value: [
+          { kind: 'field', name: 'fname' },
+          { kind: 'text', text: '.' },
+          { kind: 'field', name: 'lname' },
+          { kind: 'text', text: '@acme.com' },
+        ],
+      },
+    ]);
+    const [row] = await drain(sch);
+    expect(row!['email']).toBe('Ada.Lovelace@acme.com');
+  });
+
+  it('dotted field paths resolve nested object siblings', async () => {
+    const sch = schema([
+      {
+        name: 'address',
+        type: 'object',
+        required: true,
+        fields: [
+          { name: 'city', type: 'string', required: true, value: [{ kind: 'text', text: 'Paris' }] },
+        ],
+      },
+      {
+        name: 'city2',
+        type: 'string',
+        required: true,
+        value: [{ kind: 'field', name: 'address.city' }],
+      },
+    ]);
+    const [row] = await drain(sch);
+    expect(row!['city2']).toBe('Paris');
+  });
+
+  it('null/undefined field values coerce to empty string in multi-segment templates', async () => {
+    const sch = schema([
+      { name: 'missing', type: 'string', required: false },
+      {
+        name: 'greeting',
+        type: 'string',
+        required: true,
+        value: [
+          { kind: 'text', text: 'Hi ' },
+          { kind: 'field', name: 'missing' },
+          { kind: 'text', text: '!' },
+        ],
+      },
+    ]);
+    const [row] = await drain(sch);
+    expect(row!['greeting']).toBe('Hi !');
+  });
+
+  it('throws value_cycle on a 2-field cycle', async () => {
+    const sch = schema([
+      { name: 'a', type: 'string', required: true, value: [{ kind: 'field', name: 'b' }] },
+      { name: 'b', type: 'string', required: true, value: [{ kind: 'field', name: 'a' }] },
+    ]);
+    await expect(drain(sch)).rejects.toThrow(/value_cycle/);
+  });
+
+  it('returns null when value is undefined', async () => {
+    const sch = schema([{ name: 'x', type: 'string', required: false }]);
+    const [row] = await drain(sch);
+    expect(row!['x']).toBeNull();
   });
 });

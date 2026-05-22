@@ -7,15 +7,13 @@ import { TYPE_OPTIONS } from '../lib/types.js';
 import type { ValidationIssue } from '../lib/validateTree.js';
 import { FakerCell } from './FakerCell.js';
 import type { RefField } from './args/field-renderers/RefMentionInput.js';
-import type { ArgsStored } from './args/serialize.js';
+import type { ValueExpr } from '@mirage/types';
 
 export interface PropertyEditorRowProps {
   row: SchemaProp;
   depth: number;
   isArrayItem: boolean;
   workspaceSchemas: Schema[];
-  pickerOpen: boolean;
-  togglePicker: () => void;
   updateRow: (patch: Partial<SchemaProp> | ((r: SchemaProp) => SchemaProp)) => void;
   removeRow: () => void;
   error?: ValidationIssue;
@@ -30,8 +28,6 @@ export function PropertyEditorRow({
   depth,
   isArrayItem,
   workspaceSchemas,
-  pickerOpen,
-  togglePicker,
   updateRow,
   removeRow,
   error,
@@ -141,30 +137,18 @@ export function PropertyEditorRow({
           </span>
         ) : (
           <FakerCell
-            value={row.faker ?? ''}
-            onChange={(v, opts) =>
+            value={(row as { value?: ValueExpr }).value}
+            onChange={(next) =>
               updateRow((r) => {
-                const next: SchemaProp = { ...r };
-                if (v) next.faker = v;
-                else delete next.faker;
-                if (opts?.clearArgs) delete (next as { fakerArgs?: unknown }).fakerArgs;
-                return next;
+                const u: SchemaProp = { ...r };
+                if (next === undefined) delete (u as { value?: unknown }).value;
+                else (u as { value?: unknown }).value = next;
+                return u;
               })
             }
-            open={pickerOpen}
-            onToggle={togglePicker}
             workspaceSchemas={workspaceSchemas}
             invalid={error?.kind === 'ref_target_missing'}
-            fakerArgs={(row as { fakerArgs?: ArgsStored }).fakerArgs}
-            onFakerArgsChange={(next) =>
-              updateRow((r) => {
-                const updated: SchemaProp = { ...r };
-                if (next === undefined) delete (updated as { fakerArgs?: unknown }).fakerArgs;
-                else (updated as { fakerArgs?: unknown }).fakerArgs = next;
-                return updated;
-              })
-            }
-            argRefFields={siblingFields}
+            siblingFields={siblingFields}
             ownFieldName={row.name}
           />
         )}
@@ -217,6 +201,14 @@ export function errorLabel(issue: ValidationIssue): string {
       return `Duplicate sibling name: ${issue.sibling}`;
     case 'ref_target_missing':
       return `Reference target missing: ${issue.targetKey}`;
+    case 'tpl_field_missing':
+      return `Field reference not found: ${issue.target}`;
+    case 'tpl_field_container':
+      return `Field reference must use a dotted path for object/array: ${issue.target}`;
+    case 'tpl_field_dotted_missing':
+      return `Field path not found: ${issue.target}`;
+    case 'tpl_cycle':
+      return 'This field is part of a reference cycle';
   }
 }
 
@@ -232,8 +224,8 @@ export function applyTypeChange(
   } else if (type === 'array') {
     next.items =
       r.type === 'array' && r.items ? r.items : { name: '', type: 'string', required: false };
-  } else if (r.faker) {
-    next.faker = r.faker;
+  } else if ((r as { value?: unknown }).value) {
+    (next as { value?: unknown }).value = (r as { value?: unknown }).value;
   }
   return next;
 }

@@ -45,7 +45,7 @@ describe('soft-cycle schemas — Phone ⇄ Person via $ref:other.id', () => {
         color: 'cyan',
         icon: 'Phone',
         tags: [],
-        properties: [{ name: 'id', type: 'string', faker: 'string.uuid', required: false }],
+        properties: [{ name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false }],
       },
     );
 
@@ -59,8 +59,8 @@ describe('soft-cycle schemas — Phone ⇄ Person via $ref:other.id', () => {
         icon: 'User',
         tags: [],
         properties: [
-          { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-          { name: 'phone_id', type: 'string', faker: `$ref:${phoneKey}.id`, required: false },
+          { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+          { name: 'phone_id', type: 'string', value: [{ kind: 'ref', target: `${phoneKey}.id` }], required: false },
         ],
       },
     );
@@ -85,8 +85,8 @@ describe('soft-cycle schemas — Phone ⇄ Person via $ref:other.id', () => {
       tags: [],
       expectedUpdatedAt: phoneRow.updatedAt,
       properties: [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'person_id', type: 'string', faker: `$ref:${personKey}.id`, required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'person_id', type: 'string', value: [{ kind: 'ref', target: `${personKey}.id` }], required: false },
       ],
     });
     expect(res.status, await res.text()).toBe(200);
@@ -150,8 +150,8 @@ describe('soft-cycle schemas — Phone ⇄ Person via $ref:other.id', () => {
           icon: 'Database',
           tags: [],
           properties: [
-            { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-            { name: 'phone', type: 'string', faker: `$ref:${phoneKey}`, required: false },
+            { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+            { name: 'phone', type: 'string', value: [{ kind: 'ref', target: phoneKey }], required: false },
           ],
         }),
       });
@@ -176,9 +176,9 @@ describe('soft-cycle schemas — Phone ⇄ Person via $ref:other.id', () => {
       tags: [],
       expectedUpdatedAt: phoneRow.updatedAt,
       properties: [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'person_id', type: 'string', faker: `$ref:${personKey}.id`, required: false },
-        { name: 'embed_obj', type: 'string', faker: `$ref:${otherKey}`, required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'person_id', type: 'string', value: [{ kind: 'ref', target: `${personKey}.id` }], required: false },
+        { name: 'embed_obj', type: 'string', value: [{ kind: 'ref', target: otherKey }], required: false },
       ],
     });
     expect(res.status).toBe(400);

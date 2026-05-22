@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
 import { ArrowLeft, Copy, Trash2 } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
+import type { ValueExpr } from '@mirage/types';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { TYPE_OPTIONS } from '../lib/types.js';
 import { FakerCell } from '../PropertyEditor/FakerCell.js';
-import type { ArgsStored } from '../PropertyEditor/args/serialize.js';
 import { applyTypeChange } from '../PropertyEditor/PropertyEditorRow.js';
 
 export interface EditTabContentProps {
@@ -24,9 +23,6 @@ export function EditTabContent({
   onRemove,
   onBack,
 }: EditTabContentProps) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  useEffect(() => setPickerOpen(false), [prop.name, prop.type]);
-
   const isContainer = prop.type === 'object' || prop.type === 'array';
   const isArrayItem = prop.name === '';
   const currentValue = `${prop.type}${prop.format ? `|${prop.format}` : ''}`;
@@ -74,28 +70,17 @@ export function EditTabContent({
           {!isContainer && (
             <Field label="Faker / $ref">
               <FakerCell
-                value={prop.faker ?? ''}
-                onChange={(v, opts) => {
+                value={(prop as { value?: ValueExpr }).value}
+                onChange={(nextValue) => {
                   const next: SchemaProp = { ...prop };
-                  if (v) next.faker = v;
-                  else delete next.faker;
-                  if (opts?.clearArgs) delete (next as { fakerArgs?: unknown }).fakerArgs;
+                  if (nextValue === undefined) delete (next as { value?: unknown }).value;
+                  else (next as { value?: unknown }).value = nextValue;
                   onChange(next);
                 }}
-                open={pickerOpen}
-                onToggle={() => setPickerOpen((v) => !v)}
                 workspaceSchemas={workspaceSchemas}
                 invalid={false}
-                fakerArgs={(prop as { fakerArgs?: ArgsStored }).fakerArgs}
-                onFakerArgsChange={(nextArgs) => {
-                  const next: SchemaProp = { ...prop };
-                  if (nextArgs === undefined) {
-                    delete (next as { fakerArgs?: unknown }).fakerArgs;
-                  } else {
-                    (next as { fakerArgs?: unknown }).fakerArgs = nextArgs;
-                  }
-                  onChange(next);
-                }}
+                siblingFields={[]}
+                ownFieldName={prop.name}
               />
             </Field>
           )}

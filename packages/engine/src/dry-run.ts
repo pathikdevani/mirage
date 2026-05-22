@@ -1,4 +1,5 @@
 import type { Api } from '@mirage/types';
+import { extractCrossSchemaRefs, isPureRef } from '@mirage/types';
 import type { SandboxPool } from '@mirage/sandbox';
 import type { CustomFunctionRegistry } from './custom-function-registry.js';
 import { generateRows } from './generate-rows.js';
@@ -6,8 +7,6 @@ import { isRefPlaceholder, type ResolvedRow } from './resolve-schema.js';
 
 type Schema = Api.components['schemas']['Schema'];
 type SchemaProp = Api.components['schemas']['SchemaProp'];
-
-const REF_RE = /^\$ref:([a-z][a-z0-9-]{0,39})(?:\.([a-zA-Z_$][a-zA-Z0-9_$.]{0,128}))?$/;
 
 export interface DryRunSchemaParams {
   draft: Schema;
@@ -28,9 +27,11 @@ function collectRefKeys(properties: SchemaProp[]): Set<string> {
   const out = new Set<string>();
   const walk = (props: SchemaProp[]): void => {
     for (const p of props) {
-      if (typeof p.faker === 'string') {
-        const m = p.faker.match(REF_RE);
-        if (m) out.add(m[1]!);
+      if (Array.isArray(p.value)) {
+        for (const t of extractCrossSchemaRefs(p.value)) {
+          const dot = t.indexOf('.');
+          out.add(dot < 0 ? t : t.slice(0, dot));
+        }
       }
       if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields);
       else if (p.type === 'array' && p.items) walk([p.items]);
@@ -73,31 +74,28 @@ function substituteRefsForRow(
   const walkProps = (props: SchemaProp[], node: Record<string, unknown>): void => {
     for (const p of props) {
       const value = node[p.name];
-      if (typeof p.faker === 'string') {
-        const m = p.faker.match(REF_RE);
-        if (m && isRefPlaceholder(value)) {
-          const targetKey = m[1]!;
-          const targetField = m[2];
-          const refRow = refRowsByKey.get(targetKey);
-          if (!refRow) {
-            node[p.name] = null;
-            changed = true;
-          } else if (targetField) {
-            const v = pickPath(refRow, targetField);
-            // Defer substitution if the source field is itself an unresolved
-            // ref — a later pass will catch it once its dependency resolves.
-            // Without this guard, chained refs (a → b where b is also $ref)
-            // copy the placeholder object into the consumer field.
-            if (!isRefPlaceholder(v)) {
-              node[p.name] = v;
-              changed = true;
-            }
-          } else {
-            node[p.name] = refRow;
+      if (Array.isArray(p.value) && isPureRef(p.value) && isRefPlaceholder(value)) {
+        const target = p.value[0].target;
+        const dot = target.indexOf('.');
+        const targetKey = dot < 0 ? target : target.slice(0, dot);
+        const targetField = dot < 0 ? undefined : target.slice(dot + 1);
+        const refRow = refRowsByKey.get(targetKey);
+        if (!refRow) {
+          node[p.name] = null;
+          changed = true;
+        } else if (targetField) {
+          const v = pickPath(refRow, targetField);
+          // Defer substitution if the source field is itself an unresolved
+          // ref — a later pass will catch it once its dependency resolves.
+          if (!isRefPlaceholder(v)) {
+            node[p.name] = v;
             changed = true;
           }
-          continue;
+        } else {
+          node[p.name] = refRow;
+          changed = true;
         }
+        continue;
       }
       if (p.type === 'object' && Array.isArray(p.fields) && value && typeof value === 'object') {
         walkProps(p.fields, value as Record<string, unknown>);

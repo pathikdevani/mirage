@@ -55,8 +55,8 @@ export async function createPersonSchema(
       icon: 'User',
       tags: [],
       properties: [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'name', type: 'string', faker: 'person.firstName', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'name', type: 'string', value: [{ kind: 'method', method: 'person.firstName' }], required: false },
       ],
     },
   );
@@ -108,8 +108,8 @@ export async function createPersonSchemaWithCustomFn(
       icon: 'User',
       tags: [],
       properties: [
-        { name: 'fname', type: 'string', faker: 'person.fullName', required: false },
-        { name: 'lname', type: 'string', faker: `$fn:${fnId}`, required: false },
+        { name: 'fname', type: 'string', value: [{ kind: 'method', method: 'person.fullName' }], required: false },
+        { name: 'lname', type: 'string', value: [{ kind: 'fn', id: fnId }], required: false },
       ],
     },
   );

@@ -6,12 +6,21 @@ import { EngineError } from '../errors.js';
 type Schema = Api.components['schemas']['Schema'];
 type MirageSet = Api.components['schemas']['Set'];
 
-const primitive = (name: string, faker = 'string.uuid'): Api.components['schemas']['SchemaProp'] => ({
-  name,
-  type: 'string',
-  faker,
-  required: false,
-});
+const primitive = (
+  name: string,
+  faker = 'string.uuid',
+): Api.components['schemas']['SchemaProp'] => {
+  const refMatch = faker.match(/^\$ref:(.+)$/);
+  const value: Api.components['schemas']['ValueExpr'] = refMatch
+    ? [{ kind: 'ref', target: refMatch[1]! }]
+    : [{ kind: 'method', method: faker }];
+  return {
+    name,
+    type: 'string',
+    required: false,
+    value,
+  };
+};
 
 const schema = (key: string, props: Api.components['schemas']['SchemaProp'][] = []): Schema =>
   ({

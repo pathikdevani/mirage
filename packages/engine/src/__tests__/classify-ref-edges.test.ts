@@ -4,12 +4,26 @@ import {
   classifyRefEdge,
   type FakerIndex,
 } from '../classify-ref-edges.js';
-import type { Api } from '@mirage/types';
+import type { Api, ValueExpr } from '@mirage/types';
 
 type SchemaProp = Api.components['schemas']['SchemaProp'];
 
-function primitive(name: string, faker = 'string.uuid'): SchemaProp {
-  return { name, type: 'string', faker, required: false } as SchemaProp;
+function methodProp(name: string, method = 'string.uuid'): SchemaProp {
+  return {
+    name,
+    type: 'string',
+    required: false,
+    value: [{ kind: 'method', method }],
+  } as SchemaProp;
+}
+
+function refProp(name: string, target: string): SchemaProp {
+  return {
+    name,
+    type: 'string',
+    required: false,
+    value: [{ kind: 'ref', target }] as ValueExpr,
+  } as SchemaProp;
 }
 
 function schema(key: string, props: SchemaProp[]) {
@@ -19,8 +33,8 @@ function schema(key: string, props: SchemaProp[]) {
 describe('classifyRefEdge', () => {
   it('A: scalar cross-projection to primitive is soft', () => {
     const schemas = [
-      schema('phone', [primitive('id'), primitive('person_id', '$ref:person.id')]),
-      schema('person', [primitive('id'), primitive('phone_id', '$ref:phone.id')]),
+      schema('phone', [methodProp('id'), refProp('person_id', 'person.id')]),
+      schema('person', [methodProp('id'), refProp('phone_id', 'phone.id')]),
     ];
     const idx = buildFakerIndex(schemas);
     expect(
@@ -31,10 +45,10 @@ describe('classifyRefEdge', () => {
     ).toEqual({ hard: false });
   });
 
-  it('B: $ref without field is hard:embedding', () => {
+  it('B: ref without field is hard:embedding', () => {
     const schemas = [
-      schema('phone', [primitive('id'), primitive('person_obj', '$ref:person')]),
-      schema('person', [primitive('id')]),
+      schema('phone', [methodProp('id'), refProp('person_obj', 'person')]),
+      schema('person', [methodProp('id')]),
     ];
     const idx = buildFakerIndex(schemas);
     expect(
@@ -46,9 +60,7 @@ describe('classifyRefEdge', () => {
   });
 
   it('C-soft: self-ref to primitive id is soft', () => {
-    const schemas = [
-      schema('phone', [primitive('id'), primitive('parent_id', '$ref:phone.id')]),
-    ];
+    const schemas = [schema('phone', [methodProp('id'), refProp('parent_id', 'phone.id')])];
     const idx = buildFakerIndex(schemas);
     expect(
       classifyRefEdge(
@@ -59,7 +71,7 @@ describe('classifyRefEdge', () => {
   });
 
   it('C-hard: self-ref without field is hard:embedding', () => {
-    const schemas = [schema('phone', [primitive('id'), primitive('self', '$ref:phone')])];
+    const schemas = [schema('phone', [methodProp('id'), refProp('self', 'phone')])];
     const idx = buildFakerIndex(schemas);
     expect(
       classifyRefEdge(
@@ -71,8 +83,8 @@ describe('classifyRefEdge', () => {
 
   it('D: field-projection chain closing on itself is hard:field_deadlock', () => {
     const schemas = [
-      schema('phone', [primitive('id'), primitive('x', '$ref:person.y')]),
-      schema('person', [primitive('id'), primitive('y', '$ref:phone.x')]),
+      schema('phone', [methodProp('id'), refProp('x', 'person.y')]),
+      schema('person', [methodProp('id'), refProp('y', 'phone.x')]),
     ];
     const idx = buildFakerIndex(schemas);
     expect(
@@ -84,7 +96,7 @@ describe('classifyRefEdge', () => {
   });
 
   it('orphan target field is treated as soft (no transitive dep)', () => {
-    const schemas = [schema('phone', [primitive('id'), primitive('p', '$ref:person.id')])];
+    const schemas = [schema('phone', [methodProp('id'), refProp('p', 'person.id')])];
     const idx = buildFakerIndex(schemas);
     expect(
       classifyRefEdge(
@@ -98,12 +110,12 @@ describe('classifyRefEdge', () => {
     const addressObj: SchemaProp = {
       name: 'address',
       type: 'object',
-      fields: [primitive('city'), primitive('zip')],
+      fields: [methodProp('city'), methodProp('zip')],
       required: false,
     } as SchemaProp;
     const schemas = [
-      schema('person', [primitive('id'), addressObj]),
-      schema('phone', [primitive('id'), primitive('city_ref', '$ref:person.address.city')]),
+      schema('person', [methodProp('id'), addressObj]),
+      schema('phone', [methodProp('id'), refProp('city_ref', 'person.address.city')]),
     ];
     const idx = buildFakerIndex(schemas);
     expect(
@@ -121,9 +133,9 @@ describe('classifyRefEdge', () => {
 
   it('three-hop chain that terminates at a primitive is soft', () => {
     const schemas = [
-      schema('a', [primitive('id'), primitive('toB', '$ref:b.toC')]),
-      schema('b', [primitive('id'), primitive('toC', '$ref:c.id')]),
-      schema('c', [primitive('id')]),
+      schema('a', [methodProp('id'), refProp('toB', 'b.toC')]),
+      schema('b', [methodProp('id'), refProp('toC', 'c.id')]),
+      schema('c', [methodProp('id')]),
     ];
     const idx = buildFakerIndex(schemas);
     expect(
@@ -138,20 +150,22 @@ describe('classifyRefEdge', () => {
 describe('buildFakerIndex', () => {
   it('indexes flat properties', () => {
     const idx: FakerIndex = buildFakerIndex([
-      schema('phone', [primitive('id', 'string.uuid'), primitive('name', 'person.firstName')]),
+      schema('phone', [methodProp('id', 'string.uuid'), methodProp('name', 'person.firstName')]),
     ]);
-    expect(idx.get('phone:id')).toBe('string.uuid');
-    expect(idx.get('phone:name')).toBe('person.firstName');
+    expect(idx.get('phone:id')).toEqual([{ kind: 'method', method: 'string.uuid' }]);
+    expect(idx.get('phone:name')).toEqual([{ kind: 'method', method: 'person.firstName' }]);
   });
 
   it('indexes nested objects with dotted paths', () => {
     const obj: SchemaProp = {
       name: 'address',
       type: 'object',
-      fields: [primitive('city', 'location.city')],
+      fields: [methodProp('city', 'location.city')],
       required: false,
     } as SchemaProp;
-    const idx = buildFakerIndex([schema('person', [primitive('id'), obj])]);
-    expect(idx.get('person:address.city')).toBe('location.city');
+    const idx = buildFakerIndex([schema('person', [methodProp('id'), obj])]);
+    expect(idx.get('person:address.city')).toEqual([
+      { kind: 'method', method: 'location.city' },
+    ]);
   });
 });

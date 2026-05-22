@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Plus } from 'lucide-react';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { validateTree, type ValidationIssue } from '../lib/validateTree.js';
@@ -84,8 +84,6 @@ function NestedBuilder(props: NestedBuilderProps) {
     selectedPath,
     onSelectPath,
   } = props;
-  const [pickerOpenIdx, setPickerOpenIdx] = useState<number | null>(null);
-
   const allSiblings = useMemo<RefField[]>(
     () =>
       rows
@@ -130,8 +128,6 @@ function NestedBuilder(props: NestedBuilderProps) {
             depth={depth}
             isArrayItem={isArrayItem}
             workspaceSchemas={workspaceSchemas}
-            pickerOpen={pickerOpenIdx === idx}
-            togglePicker={() => setPickerOpenIdx(pickerOpenIdx === idx ? null : idx)}
             updateRow={(patch) => updateRow(idx, patch)}
             removeRow={() => removeRow(idx)}
             selected={path === selectedPath}

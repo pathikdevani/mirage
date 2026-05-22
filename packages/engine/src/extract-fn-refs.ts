@@ -1,9 +1,9 @@
 import type { Api } from '@mirage/types';
+import { extractFnIds } from '@mirage/types';
 
 /**
- * Walk every schema's property tree and yield every `$fn:<id>` reference.
- * Mirrors extract-set-edges.ts in shape — operates on the OpenAPI Schema shape
- * (array-of-props with `faker: "$fn:<id>"` strings).
+ * Walk every schema's property tree and yield every `fn` segment in a
+ * property's `value` AST.
  */
 
 type Schema = Api.components['schemas']['Schema'];
@@ -16,8 +16,6 @@ export interface FnRef {
   functionId: string;
 }
 
-const FN_RE = /^\$fn:(cfn_[A-Za-z0-9_-]{16})$/;
-
 export function extractFnRefs(schemas: ReadonlyArray<Schema>): FnRef[] {
   const out: FnRef[] = [];
   for (const schema of schemas) {
@@ -29,10 +27,9 @@ export function extractFnRefs(schemas: ReadonlyArray<Schema>): FnRef[] {
 function walk(props: SchemaProp[], basePath: string, schemaKey: string, out: FnRef[]): void {
   for (const p of props) {
     const path = basePath ? `${basePath}.${p.name}` : p.name;
-    if (typeof p.faker === 'string') {
-      const m = p.faker.match(FN_RE);
-      if (m) {
-        out.push({ schemaKey, fieldPath: path, functionId: m[1]! });
+    if (Array.isArray(p.value)) {
+      for (const id of extractFnIds(p.value)) {
+        out.push({ schemaKey, fieldPath: path, functionId: id });
       }
     }
     if (p.type === 'object' && Array.isArray(p.fields)) {

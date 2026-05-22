@@ -1,24 +1,21 @@
 import type { Api } from '@mirage/types';
+import { extractCrossSchemaRefs } from '@mirage/types';
 import { buildFakerIndex, classifyRefEdge } from './classify-ref-edges.js';
 
 /**
  * Compute cross-schema reference edges within a Set.
  *
- * Operates on the OpenAPI Schema shape (array-of-props with `$ref:<key>(.path)?`
- * strings on `faker`), which is what's actually persisted — distinct from the
- * abstract `Property` tree in `packages/types/src/schema.ts` (currently unused).
+ * An edge is emitted whenever an included schema's property has a value
+ * segment of kind `ref` whose target's schema key is also in `includedKeys`.
+ * References to schemas outside the inclusion set are silently skipped — they
+ * resolve against the workspace at run time, not within this Set.
  *
- * An edge is emitted whenever an included schema's property has
- * `faker: "$ref:<targetKey>(.path)?"` AND `targetKey` is also in `includedKeys`.
- * References to schemas outside the inclusion set are silently skipped — they're
- * not edges *within this Set*; they will be resolved against the workspace at
- * run time once the engine is real.
- *
- * `cardinality` is `'many'` iff the ref appears at or under any `array` ancestor.
+ * `cardinality` is `'many'` iff the ref appears at or under any `array`
+ * ancestor.
  *
  * Each edge is classified `hard` (true data dependency — embedding or
- * field-projection deadlock) or `soft` (scalar projection that resolves to
- * a primitive). Cycle detectors should ignore soft edges.
+ * field-projection deadlock) or `soft` (scalar projection that resolves to a
+ * primitive). Cycle detectors should ignore soft edges.
  */
 
 type Schema = Api.components['schemas']['Schema'];
@@ -37,8 +34,6 @@ export interface SetEdge {
   /** Only set when `hard === true`. */
   cycleKind?: 'embedding' | 'field_deadlock';
 }
-
-const REF_RE = /^\$ref:([a-z][a-z0-9-]{0,39})(?:\.([a-zA-Z_$][a-zA-Z0-9_$.]{0,128}))?$/;
 
 export function extractSetEdges(
   schemas: ReadonlyArray<Schema>,
@@ -64,11 +59,12 @@ function walk(
 ): void {
   for (const p of props) {
     const path = basePath ? `${basePath}.${p.name}` : p.name;
-    if (typeof p.faker === 'string') {
-      const m = p.faker.match(REF_RE);
-      if (m && includedKeys.has(m[1]!)) {
-        const targetKey = m[1]!;
-        const targetField = m[2];
+    if (Array.isArray(p.value)) {
+      for (const target of extractCrossSchemaRefs(p.value)) {
+        const dot = target.indexOf('.');
+        const targetKey = dot < 0 ? target : target.slice(0, dot);
+        const targetField = dot < 0 ? undefined : target.slice(dot + 1);
+        if (!includedKeys.has(targetKey)) continue;
         const cls = classifyRefEdge(
           { fromSchemaKey, fromFieldPath: path, targetKey, targetField },
           fakerIndex,

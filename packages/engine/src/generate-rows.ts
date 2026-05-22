@@ -1,4 +1,4 @@
-import type { Api } from '@mirage/types';
+import type { Api, ValueExpr, ValueSegment } from '@mirage/types';
 import type { SandboxPool } from '@mirage/sandbox';
 import type { CustomFunctionRegistry } from './custom-function-registry.js';
 import { createFakerEngine } from './faker-engine.js';
@@ -9,8 +9,6 @@ import type { RefPlaceholder, ResolvedRow } from './resolve-schema.js';
 type Schema = Api.components['schemas']['Schema'];
 type SchemaProp = Api.components['schemas']['SchemaProp'];
 
-const REF_RE = /^\$ref:([a-z][a-z0-9-]{0,39})(?:\.([a-zA-Z_$][a-zA-Z0-9_$.]{0,128}))?$/;
-const FN_RE = /^\$fn:(cfn_[A-Za-z0-9_-]{16})$/;
 const DEFAULT_ARRAY_LENGTH = 3;
 
 export interface GenerateRowsParams {
@@ -28,29 +26,24 @@ export async function* generateRows(params: GenerateRowsParams): AsyncIterable<R
     throw new EngineError('resolve_schema_bad_count', { count });
   }
 
-  // One faker engine per schema. State is consumed in row order so the
-  // resulting sequence is identical whether we generate all at once or in
-  // batches. Do not reseed inside the loop.
   const fakerEngine = createFakerEngine(locale);
   fakerEngine.seed(hashSeed(salt, schema.key));
 
   for (let i = 0; i < count; i++) {
     const rowId = `${salt}:${schema.key}:${i}`;
     const rowRng = mulberry32(hashSeed(salt, schema.key, String(i)));
-    const fields: Record<string, unknown> = {};
-    for (const p of schema.properties) {
-      fields[p.name] = await resolveProp(p, {
-        schemaKey: schema.key,
-        fakerEngine,
-        rowRng,
-        salt,
-        locale,
-        rowIndex: i,
-        customFunctions,
-        sandbox,
-        fieldPath: p.name,
-      });
-    }
+    const fields = await evalTopLevelRow(schema.properties, {
+      schemaKey: schema.key,
+      fakerEngine,
+      rowRng,
+      salt,
+      locale,
+      rowIndex: i,
+      customFunctions,
+      sandbox,
+      fieldPath: '',
+      evalNamed: async () => undefined,
+    });
     yield { __schemaKey: schema.key, __id: rowId, ...fields };
   }
 }
@@ -65,6 +58,47 @@ interface ResolvePropContext {
   customFunctions: CustomFunctionRegistry;
   sandbox: SandboxPool;
   fieldPath: string;
+  evalNamed: (name: string) => Promise<unknown>;
+}
+
+/**
+ * Evaluate the top-level properties of a single row using lazy memoised
+ * recursion. Required because `field` segments can reference siblings declared
+ * later in the schema; an in-order loop would see `undefined`.
+ */
+async function evalTopLevelRow(
+  props: SchemaProp[],
+  ctxBase: ResolvePropContext,
+): Promise<Record<string, unknown>> {
+  const byName = new Map<string, SchemaProp>();
+  for (const p of props) byName.set(p.name, p);
+
+  const memo = new Map<string, unknown>();
+  const evaluating = new Set<string>();
+
+  const evalNamed = async (name: string): Promise<unknown> => {
+    if (memo.has(name)) return memo.get(name);
+    if (evaluating.has(name)) {
+      throw new EngineError('value_cycle', {
+        fieldPath: name,
+        cycle: [...evaluating, name],
+      });
+    }
+    const p = byName.get(name);
+    if (!p) return undefined;
+    evaluating.add(name);
+    try {
+      const v = await resolveProp(p, { ...ctxBase, fieldPath: name, evalNamed });
+      memo.set(name, v);
+      return v;
+    } finally {
+      evaluating.delete(name);
+    }
+  };
+
+  const out: Record<string, unknown> = {};
+  for (const p of props) out[p.name] = await evalNamed(p.name);
+  return out;
 }
 
 async function resolveProp(p: SchemaProp, ctx: ResolvePropContext): Promise<unknown> {
@@ -89,39 +123,95 @@ async function resolveProp(p: SchemaProp, ctx: ResolvePropContext): Promise<unkn
     }
     return out;
   }
-  if (typeof p.faker !== 'string' || p.faker.length === 0) return null;
 
-  const refMatch = p.faker.match(REF_RE);
-  if (refMatch) {
-    const ref: RefPlaceholder = {
-      __ref: true,
-      toSchemaKey: refMatch[1]!,
-      fromFieldPath: ctx.fieldPath,
-    };
-    return ref;
+  if (!Array.isArray(p.value) || p.value.length === 0) return null;
+
+  if (p.value.length === 1) return evalSegment(p.value[0]!, ctx);
+
+  const parts: string[] = [];
+  for (const seg of p.value) {
+    const v = await evalSegment(seg, ctx);
+    parts.push(stringifyForTemplate(v));
   }
-  const fnMatch = p.faker.match(FN_RE);
-  if (fnMatch) {
-    const fnId = fnMatch[1]!;
-    const entry = ctx.customFunctions.get(fnId);
-    if (!entry) {
-      throw new EngineError('fn_target_missing', { fieldPath: ctx.fieldPath, functionId: fnId });
-    }
-    if (entry.usage === 'strategy') {
-      throw new EngineError('fn_usage_mismatch', {
-        fieldPath: ctx.fieldPath,
-        functionId: fnId,
-        usage: entry.usage,
-      });
-    }
-    const seedBase = hashSeed(ctx.salt, ctx.schemaKey, String(ctx.rowIndex), ctx.fieldPath);
-    const callerCtx = {
-      __fakerSeed: seedBase,
-      __fakerLocale: ctx.locale,
-      __rngSeed: seedBase ^ 0x9e3779b9,
-      salt: ctx.salt,
-    };
-    return ctx.sandbox.invoke(entry.source, callerCtx);
-  }
-  return ctx.fakerEngine.call(p.faker, p.fakerArgs);
+  return parts.join('');
 }
+
+function stringifyForTemplate(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'object') {
+    // faker methods like `airline.airport` return objects; in a multi-segment
+    // template we serialize them as JSON rather than the unhelpful
+    // `[object Object]`. For native string output, use a single-segment value.
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
+  }
+  return String(v);
+}
+
+async function evalSegment(seg: ValueSegment, ctx: ResolvePropContext): Promise<unknown> {
+  switch (seg.kind) {
+    case 'text':
+      return seg.text;
+    case 'field':
+      return resolveFieldByDottedPath(seg.name, ctx);
+    case 'method':
+      return ctx.fakerEngine.call(seg.method, seg.args as Parameters<typeof ctx.fakerEngine.call>[1]);
+    case 'ref': {
+      const ref: RefPlaceholder = {
+        __ref: true,
+        toSchemaKey: seg.target.split('.')[0]!,
+        fromFieldPath: ctx.fieldPath,
+      };
+      return ref;
+    }
+    case 'fn': {
+      const entry = ctx.customFunctions.get(seg.id);
+      if (!entry) {
+        throw new EngineError('fn_target_missing', {
+          fieldPath: ctx.fieldPath,
+          functionId: seg.id,
+        });
+      }
+      if (entry.usage === 'strategy') {
+        throw new EngineError('fn_usage_mismatch', {
+          fieldPath: ctx.fieldPath,
+          functionId: seg.id,
+          usage: entry.usage,
+        });
+      }
+      const seedBase = hashSeed(
+        ctx.salt,
+        ctx.schemaKey,
+        String(ctx.rowIndex),
+        ctx.fieldPath,
+      );
+      const callerCtx = {
+        __fakerSeed: seedBase,
+        __fakerLocale: ctx.locale,
+        __rngSeed: seedBase ^ 0x9e3779b9,
+        salt: ctx.salt,
+      };
+      return ctx.sandbox.invoke(entry.source, callerCtx);
+    }
+  }
+}
+
+async function resolveFieldByDottedPath(
+  path: string,
+  ctx: ResolvePropContext,
+): Promise<unknown> {
+  const parts = path.split('.');
+  const head = parts[0]!;
+  let cursor = await ctx.evalNamed(head);
+  for (let i = 1; i < parts.length; i++) {
+    if (cursor == null || typeof cursor !== 'object') return undefined;
+    cursor = (cursor as Record<string, unknown>)[parts[i]!];
+  }
+  return cursor;
+}
+
+// Re-export ValueExpr so consumers of engine internals (tests) can name it.
+export type { ValueExpr };

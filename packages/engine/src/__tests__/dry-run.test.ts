@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import type { Api } from '@mirage/types';
+import type { Api, ValueExpr } from '@mirage/types';
 import type { SandboxPool } from '@mirage/sandbox';
 import { dryRunSchema } from '../dry-run.js';
 import { customFunctionRegistryFromMap } from '../custom-function-registry.js';
 
 type Schema = Api.components['schemas']['Schema'];
+type SchemaProp = Api.components['schemas']['SchemaProp'];
 
-const schema = (key: string, props: Api.components['schemas']['SchemaProp'][]): Schema =>
+const schema = (key: string, props: SchemaProp[]): Schema =>
   ({
     id: `sch_${key}`,
     workspaceId: 'ws_1',
@@ -23,13 +24,19 @@ const schema = (key: string, props: Api.components['schemas']['SchemaProp'][]): 
     updatedAt: '2026-05-20T00:00:00Z',
   }) as Schema;
 
+const methodProp = (name: string, method: string): SchemaProp =>
+  ({ name, type: 'string', required: false, value: [{ kind: 'method', method }] } as SchemaProp);
+
+const refProp = (name: string, target: string): SchemaProp =>
+  ({ name, type: 'string', required: false, value: [{ kind: 'ref', target }] as ValueExpr } as SchemaProp);
+
 const fakeSandbox = { invoke: async () => null } as unknown as SandboxPool;
 
 describe('dryRunSchema', () => {
   it('generates the requested number of rows for the main schema', async () => {
     const draft = schema('user', [
-      { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-      { name: 'name', type: 'string', faker: 'person.firstName', required: false },
+      methodProp('id', 'string.uuid'),
+      methodProp('name', 'person.firstName'),
     ]);
     const result = await dryRunSchema({
       draft,
@@ -47,12 +54,12 @@ describe('dryRunSchema', () => {
 
   it('generates ref rows and substitutes them into the main rows', async () => {
     const orgSchema = schema('org', [
-      { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-      { name: 'name', type: 'string', faker: 'company.name', required: false },
+      methodProp('id', 'string.uuid'),
+      methodProp('name', 'company.name'),
     ]);
     const draft = schema('user', [
-      { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-      { name: 'orgId', type: 'string', faker: '$ref:org.id', required: false },
+      methodProp('id', 'string.uuid'),
+      refProp('orgId', 'org.id'),
     ]);
     const result = await dryRunSchema({
       draft,
@@ -72,9 +79,9 @@ describe('dryRunSchema', () => {
 
   it('resolves chained self-refs (a → b → c) within a single schema', async () => {
     const mobile = schema('mobile', [
-      { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-      { name: 'person_id', type: 'string', faker: '$ref:mobile.id', required: false },
-      { name: 'internal_id', type: 'string', faker: '$ref:mobile.person_id', required: false },
+      methodProp('id', 'string.uuid'),
+      refProp('person_id', 'mobile.id'),
+      refProp('internal_id', 'mobile.person_id'),
     ]);
     const result = await dryRunSchema({
       draft: mobile,
@@ -98,8 +105,8 @@ describe('dryRunSchema', () => {
 
   it('leaves fields as null when ref target is missing from referencedSchemas', async () => {
     const draft = schema('user', [
-      { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-      { name: 'orgId', type: 'string', faker: '$ref:org.id', required: false },
+      methodProp('id', 'string.uuid'),
+      refProp('orgId', 'org.id'),
     ]);
     const result = await dryRunSchema({
       draft,

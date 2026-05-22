@@ -1,7 +1,14 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ClientSession } from 'mongodb';
 import { nanoid } from 'nanoid';
-import { asId, type Api, type WorkspaceId } from '@mirage/types';
+import {
+  asId,
+  extractCrossSchemaRefs,
+  extractFnIds,
+  type Api,
+  type ValueExpr,
+  type WorkspaceId,
+} from '@mirage/types';
 import {
   buildFakerIndex,
   classifyRefEdge,
@@ -11,6 +18,7 @@ import {
 } from '@mirage/engine';
 import type { MirageDb, SchemaDoc } from '../db.js';
 import { getSandbox } from '../sandbox-singleton.js';
+import { validateValueExpr } from './validate-value-expr.js';
 
 type Schema = Api.components['schemas']['Schema'];
 type SchemaProp = Api.components['schemas']['SchemaProp'];
@@ -30,7 +38,6 @@ interface IdParams {
 
 const KEY_RE = /^[a-z][a-z0-9-]{0,39}$/;
 const PROP_NAME_RE = /^[a-zA-Z_$][a-zA-Z0-9_$]{0,63}$/;
-const REF_RE = /^\$ref:([a-z][a-z0-9-]{0,39})\.([a-zA-Z_$][a-zA-Z0-9_$.]{0,128})$/;
 
 interface ValidationError {
   code: string;
@@ -41,8 +48,6 @@ interface ValidationError {
 function err(code: string, message: string, detail?: unknown): ValidationError {
   return detail === undefined ? { code, message } : { code, message, detail };
 }
-
-import { validateFakerArgs } from './validate-faker-args.js';
 
 function validateProps(properties: SchemaProp[]): ValidationError | null {
   if (!Array.isArray(properties) || properties.length === 0) {
@@ -63,8 +68,8 @@ function validateProps(properties: SchemaProp[]): ValidationError | null {
       }
       seen.add(p.name);
 
-      const fakerArgsErr = validateFakerArgs(p);
-      if (fakerArgsErr) return fakerArgsErr;
+      const valueErr = validateValueExpr(p);
+      if (valueErr) return valueErr;
 
       if (p.type === 'object') {
         if (Array.isArray(p.fields)) queue.push({ props: p.fields });
@@ -84,17 +89,16 @@ function validateProps(properties: SchemaProp[]): ValidationError | null {
   return null;
 }
 
-const FN_PREFIX_RE = /^\$fn:(cfn_[A-Za-z0-9_-]{16})$/;
-
-/** Walk every faker `$fn:` in the tree and return [{ functionId, fromPath }]. */
+/** Walk every `fn` segment in the property tree. */
 function collectFnRefs(properties: SchemaProp[]): { functionId: string; fromPath: string }[] {
   const out: { functionId: string; fromPath: string }[] = [];
   const walk = (props: SchemaProp[], path: string): void => {
     for (const p of props) {
       const nextPath = path ? `${path}.${p.name}` : p.name;
-      if (typeof p.faker === 'string') {
-        const m = p.faker.match(FN_PREFIX_RE);
-        if (m) out.push({ functionId: m[1]!, fromPath: nextPath });
+      if (Array.isArray(p.value)) {
+        for (const id of extractFnIds(p.value)) {
+          out.push({ functionId: id, fromPath: nextPath });
+        }
       }
       if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields, nextPath);
       else if (p.type === 'array' && p.items) walk([p.items], `${nextPath}[]`);
@@ -104,7 +108,7 @@ function collectFnRefs(properties: SchemaProp[]): { functionId: string; fromPath
   return out;
 }
 
-/** Walk every faker `$ref:` in the tree and return [{ targetKey, fromPath }]. */
+/** Walk every `ref` segment in the property tree (with a `.field`). */
 function collectRefs(
   properties: SchemaProp[],
 ): { targetKey: string; targetField: string; fromPath: string }[] {
@@ -112,9 +116,16 @@ function collectRefs(
   const walk = (props: SchemaProp[], path: string): void => {
     for (const p of props) {
       const nextPath = path ? `${path}.${p.name}` : p.name;
-      if (typeof p.faker === 'string') {
-        const m = p.faker.match(REF_RE);
-        if (m) out.push({ targetKey: m[1]!, targetField: m[2]!, fromPath: nextPath });
+      if (Array.isArray(p.value)) {
+        for (const target of extractCrossSchemaRefs(p.value)) {
+          const dot = target.indexOf('.');
+          if (dot < 0) continue;
+          out.push({
+            targetKey: target.slice(0, dot),
+            targetField: target.slice(dot + 1),
+            fromPath: nextPath,
+          });
+        }
       }
       if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields, nextPath);
       else if (p.type === 'array' && p.items) walk([p.items], `${nextPath}[]`);
@@ -124,19 +135,22 @@ function collectRefs(
   return out;
 }
 
-/** Rewrite any `$ref:<oldKey>(.field…)?` in a property tree to `$ref:<newKey>(.field…)?`.
- *  Returns true if the tree was mutated in place. */
+/** Rewrite the schema-key part of every `ref` segment whose target points at `oldKey`. */
 function rewriteRefsInTree(props: SchemaProp[], oldKey: string, newKey: string): boolean {
-  const prefix = `$ref:${oldKey}`;
   let changed = false;
   const walk = (arr: SchemaProp[]): void => {
     for (const p of arr) {
-      if (typeof p.faker === 'string' && p.faker.startsWith(prefix)) {
-        const remainder = p.faker.slice(prefix.length);
-        if (remainder === '' || remainder.startsWith('.')) {
-          p.faker = `$ref:${newKey}${remainder}`;
+      if (Array.isArray(p.value)) {
+        const next: ValueExpr = p.value.map((seg) => {
+          if (seg.kind !== 'ref') return seg;
+          const dot = seg.target.indexOf('.');
+          const key = dot < 0 ? seg.target : seg.target.slice(0, dot);
+          if (key !== oldKey) return seg;
+          const remainder = dot < 0 ? '' : seg.target.slice(dot);
           changed = true;
-        }
+          return { kind: 'ref', target: `${newKey}${remainder}` };
+        });
+        if (changed) (p as { value?: ValueExpr }).value = next;
       }
       if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields);
       else if (p.type === 'array' && p.items) walk([p.items]);
@@ -236,8 +250,6 @@ function findHardCycle(corpus: ReadonlyArray<SchemaForCycle>): HardCycleHit | nu
   return null;
 }
 
-const REF_ANY_RE = /^\$ref:([a-z][a-z0-9-]{0,39})(?:\.([a-zA-Z_$][a-zA-Z0-9_$.]{0,128}))?$/;
-
 /** Like `collectRefs` but returns `targetField` as `undefined` when no `.field` is present. */
 function collectRefsAny(
   properties: SchemaProp[],
@@ -246,9 +258,15 @@ function collectRefsAny(
   const walk = (props: SchemaProp[], path: string): void => {
     for (const p of props) {
       const next = path ? `${path}.${p.name}` : p.name;
-      if (typeof p.faker === 'string') {
-        const m = p.faker.match(REF_ANY_RE);
-        if (m) out.push({ targetKey: m[1]!, targetField: m[2], fromPath: next });
+      if (Array.isArray(p.value)) {
+        for (const target of extractCrossSchemaRefs(p.value)) {
+          const dot = target.indexOf('.');
+          out.push({
+            targetKey: dot < 0 ? target : target.slice(0, dot),
+            targetField: dot < 0 ? undefined : target.slice(dot + 1),
+            fromPath: next,
+          });
+        }
       }
       if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields, next);
       else if (p.type === 'array' && p.items) walk([p.items], `${next}[]`);

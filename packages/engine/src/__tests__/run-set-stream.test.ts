@@ -52,7 +52,7 @@ const buildSet = (
 describe('runSetStream — single schema', () => {
   it('yields batches with the right totals', async () => {
     const schemas = [
-      schema('a', [{ name: 'id', type: 'string', faker: 'string.uuid', required: false }]),
+      schema('a', [{ name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false }]),
     ];
     const set = buildSet([{ schemaKey: 'a', count: 7 }]);
     const batches = [];
@@ -76,11 +76,11 @@ describe('runSetStream — cross-schema refs', () => {
   it('substitutes a 1:1 reference with the target __id when no toFieldPath', async () => {
     const schemas = [
       schema('person', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
       ]),
       schema('mobile', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'personId', type: 'string', faker: '$ref:person', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'personId', type: 'string', value: [{ kind: 'ref', target: 'person' }], required: false },
       ]),
     ];
     const set = buildSet([
@@ -106,12 +106,12 @@ describe('runSetStream — cross-schema refs', () => {
   it('projects through toFieldPath when set', async () => {
     const schemas = [
       schema('person', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'email', type: 'string', faker: 'internet.email', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'email', type: 'string', value: [{ kind: 'method', method: 'internet.email' }], required: false },
       ]),
       schema('mobile', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'personEmail', type: 'string', faker: '$ref:person.email', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'personEmail', type: 'string', value: [{ kind: 'ref', target: 'person.email' }], required: false },
       ]),
     ];
     const set = buildSet([
@@ -139,12 +139,12 @@ describe('runSetStream — soft cycles', () => {
   it('generates Phone and Person with cross-pointing UUIDs', async () => {
     const schemas = [
       schema('phone', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'person_id', type: 'string', faker: '$ref:person.id', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'person_id', type: 'string', value: [{ kind: 'ref', target: 'person.id' }], required: false },
       ]),
       schema('person', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'phone_id', type: 'string', faker: '$ref:phone.id', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'phone_id', type: 'string', value: [{ kind: 'ref', target: 'phone.id' }], required: false },
       ]),
     ];
     const set = buildSet([
@@ -185,8 +185,8 @@ describe('runSetStream — self-references', () => {
   it('resolves a soft self-ref to a sibling row (single-schema soft cycle)', async () => {
     const schemas = [
       schema('mobile', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'person_id', type: 'string', faker: '$ref:mobile.id', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'person_id', type: 'string', value: [{ kind: 'ref', target: 'mobile.id' }], required: false },
       ]),
     ];
     const set = buildSet([{ schemaKey: 'mobile', count: 3 }]);
@@ -213,9 +213,9 @@ describe('runSetStream — self-references', () => {
   it('resolves a chain of self-refs (a → b → c) within one schema', async () => {
     const schemas = [
       schema('mobile', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'person_id', type: 'string', faker: '$ref:mobile.id', required: false },
-        { name: 'internal_id', type: 'string', faker: '$ref:mobile.person_id', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'person_id', type: 'string', value: [{ kind: 'ref', target: 'mobile.id' }], required: false },
+        { name: 'internal_id', type: 'string', value: [{ kind: 'ref', target: 'mobile.person_id' }], required: false },
       ]),
     ];
     const set = buildSet([{ schemaKey: 'mobile', count: 3 }]);
@@ -253,12 +253,12 @@ describe('runSetStream — self-references', () => {
     // reads start happening.
     const schemas = [
       schema('person', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
       ]),
       schema('mobile', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'person_id', type: 'string', faker: '$ref:person.id', required: false },
-        { name: 'internal_id', type: 'string', faker: '$ref:mobile.person_id', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'person_id', type: 'string', value: [{ kind: 'ref', target: 'person.id' }], required: false },
+        { name: 'internal_id', type: 'string', value: [{ kind: 'ref', target: 'mobile.person_id' }], required: false },
       ]),
     ];
     const set = buildSet(
@@ -311,12 +311,12 @@ describe('runSetStream — self-references', () => {
     // holding the stale placeholder.
     const schemas = [
       schema('person', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
       ]),
       schema('mobile', [
-        { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-        { name: 'person_id', type: 'string', faker: '$ref:person.id', required: false },
-        { name: 'internal_id', type: 'string', faker: '$ref:mobile.person_id', required: false },
+        { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+        { name: 'person_id', type: 'string', value: [{ kind: 'ref', target: 'person.id' }], required: false },
+        { name: 'internal_id', type: 'string', value: [{ kind: 'ref', target: 'mobile.person_id' }], required: false },
       ]),
     ];
     const set = buildSet([
@@ -354,7 +354,7 @@ describe('runSetStream — self-references', () => {
 describe('runSetStream — cancellation', () => {
   it('throws CancelledError when signal is aborted between batches', async () => {
     const schemas = [
-      schema('a', [{ name: 'id', type: 'string', faker: 'string.uuid', required: false }]),
+      schema('a', [{ name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false }]),
     ];
     const set = buildSet([{ schemaKey: 'a', count: 10 }]);
     const controller = new AbortController();

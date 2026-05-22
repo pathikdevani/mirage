@@ -1,10 +1,11 @@
 import type { SchemaProp } from './types.js';
-import { REF_PREFIX } from './types.js';
+import { isPureMethod, isPureRef } from '@mirage/types';
 
 /**
- * Convert a builder property into a JSON-Schema fragment. Ported from
- * `design/screens_export/DataTable.jsx:1081-1116`. Used for the live preview
- * in Step 3 of the Create sheet.
+ * Convert a builder property into a JSON-Schema fragment. Used for the live
+ * preview. Pure-method and pure-ref single-segment values produce a `faker`
+ * fragment; mixed templates are not represented in JSON Schema (the preview
+ * just shows the base type — generation happens at run time).
  */
 type JsonSchemaFragment = {
   type: string;
@@ -21,13 +22,14 @@ type JsonSchemaFragment = {
 export function rowToSchema(row: SchemaProp): JsonSchemaFragment {
   const out: JsonSchemaFragment = { type: row.type };
   if (row.format) out.format = row.format;
-  if (row.faker && row.type !== 'object' && row.type !== 'array') {
-    if (row.faker.startsWith(REF_PREFIX)) {
-      const parts = row.faker.slice(REF_PREFIX.length).split('.');
+  if (Array.isArray(row.value) && row.type !== 'object' && row.type !== 'array') {
+    if (isPureRef(row.value)) {
+      const parts = row.value[0].target.split('.');
       out.faker = { args: [{ $ref: `#/schema/${parts[0] ?? ''}/${parts.slice(1).join('.')}` }] };
-    } else {
-      out.faker = { method: row.faker };
+    } else if (isPureMethod(row.value)) {
+      out.faker = { method: row.value[0].method };
     }
+    // Mixed templates / pure text / pure fn intentionally omit the faker fragment.
   }
   if (row.type === 'object') {
     out.properties = {};

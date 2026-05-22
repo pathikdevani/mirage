@@ -22,5 +22,6 @@ export * from './schema.js';
 export * from './set.js';
 export * from './run.js';
 export * from './auth.js';
+export * from './valueExpr.js';
 
 export type * as Api from './openapi.generated.js';

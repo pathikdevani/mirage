@@ -55,5 +55,3 @@ export const TYPE_OPTIONS: ReadonlyArray<{
 
 export const PROP_NAME_RE = /^[a-zA-Z_$][a-zA-Z0-9_$]{0,63}$/;
 export const KEY_RE = /^[a-z][a-z0-9-]{0,39}$/;
-export const REF_PREFIX = '$ref:';
-export const FN_PREFIX = '$fn:';

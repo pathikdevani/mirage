@@ -13,6 +13,3 @@ export const USAGE_LABEL: Record<Usage, string> = {
   strategy: 'Strategy',
   both: 'Both',
 };
-
-/** Sentinel prefix used inside SchemaProp.faker to reference a function by id. */
-export const FN_PREFIX = '$fn:';

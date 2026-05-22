@@ -639,24 +639,63 @@ components:
           type: string
           enum: [uuid, email, date, date-time]
         required: { type: boolean }
-        faker: { type: string }
-        fakerArgs:
-          description: |
-            Arguments passed to the faker method. Object for `shape: 'options'`
-            methods (e.g. `{ min: 10, max: 100 }`), array for positional
-            methods (e.g. `['female']`). Only valid when `faker` is set to a
-            faker method (not `$ref:` or `$fn:`).
-          oneOf:
-            - type: object
-              additionalProperties: true
-            - type: array
-              items: {}
+        value:
+          $ref: '#/components/schemas/ValueExpr'
         fields:
           type: array
           items:
             $ref: '#/components/schemas/SchemaProp'
         items:
           $ref: '#/components/schemas/SchemaProp'
+
+    ValueExpr:
+      description: |
+        Non-empty array of segments describing how to generate a property's
+        value. Mixes literal text, sibling-field references, inline faker
+        calls, cross-schema references, and custom-function calls.
+      type: array
+      minItems: 1
+      items:
+        $ref: '#/components/schemas/ValueSegment'
+
+    ValueSegment:
+      oneOf:
+        - type: object
+          required: [kind, text]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [text] }
+            text: { type: string }
+        - type: object
+          required: [kind, name]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [field] }
+            name: { type: string }
+        - type: object
+          required: [kind, method]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [method] }
+            method: { type: string }
+            args:
+              oneOf:
+                - type: object
+                  additionalProperties: true
+                - type: array
+                  items: {}
+        - type: object
+          required: [kind, target]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [ref] }
+            target: { type: string }
+        - type: object
+          required: [kind, id]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [fn] }
+            id: { type: string }
 
     Schema:
       type: object

@@ -1,5 +1,5 @@
 import type { SchemaProp } from './types.js';
-import { REF_PREFIX } from './types.js';
+import { extractCrossSchemaRefs } from '@mirage/types';
 
 export interface TreeStats {
   total: number;
@@ -19,7 +19,7 @@ export function countTreeStats(properties: SchemaProp[]): TreeStats {
     for (const p of props) {
       total++;
       if (p.required) required++;
-      if (typeof p.faker === 'string' && p.faker.startsWith(REF_PREFIX)) refs++;
+      if (Array.isArray(p.value)) refs += extractCrossSchemaRefs(p.value).length;
       if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields, depth + 1);
       if (p.type === 'array' && p.items) walk([p.items], depth + 1);
     }
@@ -28,18 +28,24 @@ export function countTreeStats(properties: SchemaProp[]): TreeStats {
   return { total, required, refs, maxDepth };
 }
 
-/** Flat list of every `$ref:` faker in the tree with its dotted path. */
+/** Flat list of every cross-schema `ref` segment in the tree with its dotted path. */
 export function findRefs(
   properties: SchemaProp[],
 ): { path: string; targetKey: string; targetField: string }[] {
   const out: { path: string; targetKey: string; targetField: string }[] = [];
-  const re = /^\$ref:([^.]+)\.(.+)$/;
   const walk = (props: SchemaProp[], path: string): void => {
     for (const p of props) {
       const nextPath = path ? `${path}.${p.name}` : p.name;
-      if (typeof p.faker === 'string') {
-        const m = p.faker.match(re);
-        if (m) out.push({ path: nextPath, targetKey: m[1]!, targetField: m[2]! });
+      if (Array.isArray(p.value)) {
+        for (const target of extractCrossSchemaRefs(p.value)) {
+          const dot = target.indexOf('.');
+          if (dot < 0) continue;
+          out.push({
+            path: nextPath,
+            targetKey: target.slice(0, dot),
+            targetField: target.slice(dot + 1),
+          });
+        }
       }
       if (p.type === 'object' && Array.isArray(p.fields)) walk(p.fields, nextPath);
       if (p.type === 'array' && p.items) walk([p.items], `${nextPath}[]`);

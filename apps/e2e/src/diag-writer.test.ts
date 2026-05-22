@@ -68,8 +68,8 @@ const schema: Api.components['schemas']['Schema'] = {
   icon: 'User',
   tags: [],
   properties: [
-    { name: 'id', type: 'string', faker: 'string.uuid', required: false },
-    { name: 'name', type: 'string', faker: 'person.firstName', required: false },
+    { name: 'id', type: 'string', value: [{ kind: 'method', method: 'string.uuid' }], required: false },
+    { name: 'name', type: 'string', value: [{ kind: 'method', method: 'person.firstName' }], required: false },
   ],
   createdBy: 'u',
   createdAt: '2026-05-20T00:00:00Z',
