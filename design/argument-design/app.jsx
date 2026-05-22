@@ -8,7 +8,7 @@ const { useEffect: useEffectApp, useMemo: useMemoApp, useRef: useRefApp, useStat
 // ---------- sample data ----------
 const INITIAL_ROWS = [
   { id: 'r1', name: 'id', type: 'string', format: 'uuid', required: true, faker: 'string.uuid', args: undefined },
-  { id: 'r2', name: 'email', type: 'string', format: 'email', required: true, faker: 'internet.email', args: { provider: 'mirage.dev' } },
+  { id: 'r2', name: 'email', type: 'string', format: 'email', required: true, faker: 'internet.email', args: { firstName: { $ref: 'firstName' }, lastName: { $ref: 'lastName' }, provider: 'mirage.dev' } },
   { id: 'r3', name: 'firstName', type: 'string', required: true, faker: 'person.firstName', args: { sex: 'female' } },
   { id: 'r4', name: 'lastName', type: 'string', required: true, faker: 'person.lastName', args: undefined },
   { id: 'r5', name: 'age', type: 'integer', required: false, faker: 'number.int', args: { min: 18, max: 80 } },
@@ -36,6 +36,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "placement": "popover",
   "showSummaryInCell": true,
   "density": "comfortable",
+  "refStyle": "toggle",
   "dark": false
 }/*EDITMODE-END*/;
 
@@ -67,6 +68,10 @@ function App() {
 
   const activeRow = rows.find((r) => r.id === argsOpenId);
 
+  // Sibling fields available for reference (everything except the active row,
+  // and only fields with a faker method).
+  const fieldsForRefs = useMemoApp(() => rows.map((r) => ({ name: r.name, type: r.type, faker: r.faker })), [rows]);
+
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <TopBar />
@@ -97,6 +102,7 @@ function App() {
                     toggleArgs={() => setArgsOpenId(argsOpenId === row.id ? (t.placement === 'sidepanel' ? row.id : null) : row.id)}
                     onChange={(patch) => updateRow(row.id, patch)}
                     onRemove={() => removeRow(row.id)}
+                    allFields={fieldsForRefs}
                   />
                 ))}
                 <button
@@ -119,6 +125,9 @@ function App() {
                 onChange={(v) => activeRow && updateRow(activeRow.id, { args: v })}
                 onClose={() => setArgsOpenId(null)}
                 fieldPath={activeRow ? activeRow.name : null}
+                fields={fieldsForRefs}
+                ownField={activeRow?.name}
+                refVariant={t.refStyle}
               />
             )}
           </div>
@@ -130,7 +139,7 @@ function App() {
 }
 
 // ---------- row ----------
-function Row({ row, tweaks, pickerOpen, argsOpen, togglePicker, toggleArgs, onChange, onRemove }) {
+function Row({ row, tweaks, pickerOpen, argsOpen, togglePicker, toggleArgs, onChange, onRemove, allFields }) {
   const argsBtnRef = useRefApp(null);
   const isContainer = row.type === 'object' || row.type === 'array';
   const currentValue = `${row.type}${row.format ? `|${row.format}` : ''}`;
@@ -230,6 +239,9 @@ function Row({ row, tweaks, pickerOpen, argsOpen, togglePicker, toggleArgs, onCh
           args={row.args}
           onChange={(v) => onChange({ args: v })}
           onClose={() => toggleArgs()}
+          fields={allFields}
+          ownField={row.name}
+          refVariant={tweaks.refStyle}
         />
       )}
 
@@ -239,6 +251,9 @@ function Row({ row, tweaks, pickerOpen, argsOpen, togglePicker, toggleArgs, onCh
           args={row.args}
           onChange={(v) => onChange({ args: v })}
           onClose={() => toggleArgs()}
+          fields={allFields}
+          ownField={row.name}
+          refVariant={tweaks.refStyle}
         />
       )}
     </>
@@ -333,17 +348,35 @@ function Stat({ tweaks }) {
     inline:    { title: 'Inline strip', hint: 'Args expand below the row, keeping the field and its config visibly grouped.' },
     sidepanel: { title: 'Side panel',  hint: 'A right-hand drawer mirrors the selected row — Notion / Linear style.' },
   };
+  const refHints = {
+    toggle:  'String args show a small ⧉ toggle — flip any value into a reference to another field.',
+    tabs:    'Each string arg has a “value / reference” switcher above it.',
+    mention: 'Type into a string arg; press @ to insert a field token inline. Mix text and references freely.',
+  };
   const v = variants[t.placement];
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-dashed border-brand-violet/30 bg-brand-violet/5 px-3 py-2.5">
-      <window.SchemaModule.Icon.Sliders size={14} />
-      <div className="min-w-0 flex-1 text-[12px]">
-        <div>
-          <span className="font-semibold">Argument UI:</span>{' '}
-          <span className="font-mono">{v.title.toLowerCase()}</span>
-          <span className="text-muted-foreground"> — try the three placements from the Tweaks panel.</span>
+    <div className="flex flex-col gap-2 rounded-lg border border-dashed border-brand-violet/30 bg-brand-violet/5 px-3 py-2.5">
+      <div className="flex items-start gap-3 text-[12px]">
+        <window.SchemaModule.Icon.Sliders size={14} />
+        <div className="min-w-0 flex-1">
+          <div>
+            <span className="font-semibold">Argument UI:</span>{' '}
+            <span className="font-mono">{v.title.toLowerCase()}</span>
+            <span className="text-muted-foreground"> — try the three placements from the Tweaks panel.</span>
+          </div>
+          <div className="mt-0.5 text-[11.5px] text-muted-foreground">{v.hint}</div>
         </div>
-        <div className="mt-0.5 text-[11.5px] text-muted-foreground">{v.hint}</div>
+      </div>
+      <div className="flex items-start gap-3 border-t border-brand-violet/15 pt-2 text-[12px]">
+        <window.SchemaModule.Icon.Link size={14} />
+        <div className="min-w-0 flex-1">
+          <div>
+            <span className="font-semibold">Field references:</span>{' '}
+            <span className="font-mono">{t.refStyle}</span>
+            <span className="text-muted-foreground"> — open the <span className="font-mono text-foreground/80">email</span> row to see <span className="font-mono text-brand-violet">→firstName</span> + <span className="font-mono text-brand-violet">→lastName</span> in action.</span>
+          </div>
+          <div className="mt-0.5 text-[11.5px] text-muted-foreground">{refHints[t.refStyle]}</div>
+        </div>
       </div>
     </div>
   );
@@ -374,6 +407,16 @@ function Tweaks({ t, setTweak }) {
             { value: 'sidepanel', label: 'Side' },
           ]}
           onChange={(v) => setTweak('placement', v)}
+        />
+        <TweakRadio
+          label="Reference input"
+          value={t.refStyle}
+          options={[
+            { value: 'toggle', label: 'Toggle' },
+            { value: 'tabs', label: 'Tabs' },
+            { value: 'mention', label: '@-mention' },
+          ]}
+          onChange={(v) => setTweak('refStyle', v)}
         />
         <TweakToggle
           label="Show args in cell"

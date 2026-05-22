@@ -89,6 +89,19 @@ function methodHasArgs(method) {
 
 /** Sample value preview, drawn from a tiny faker simulation. */
 function previewValue(method, args, rng) {
+  // Normalize args: ref objects + ref-tokens are unknown at preview time, so
+  // we strip them (faker would otherwise fall back to its own sample) — that
+  // keeps the live preview honest about "this will be filled at generation".
+  if (args && typeof args === 'object') {
+    const cleaned = {};
+    for (const k of Object.keys(args)) {
+      const v = args[k];
+      if (v && typeof v === 'object' && typeof v.$ref === 'string') continue;
+      if (typeof v === 'string' && /\{\{[^}]+\}\}/.test(v)) continue;
+      cleaned[k] = v;
+    }
+    args = cleaned;
+  }
   try {
     const c = window.FAKER_CATALOG[method];
     const r = rng ?? Math.random;

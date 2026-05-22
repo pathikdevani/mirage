@@ -45,7 +45,7 @@ function MethodHeader({ method, args, onChange }) {
 }
 
 // ---------- popover variant ----------
-function ArgsPopover({ anchorRef, open, method, args, onChange, onClose }) {
+function ArgsPopover({ anchorRef, open, method, args, onChange, onClose, fields, ownField, refVariant }) {
   const [pos, setPos] = useStateAP(null);
   const popRef = useRefAP(null);
 
@@ -84,7 +84,7 @@ function ArgsPopover({ anchorRef, open, method, args, onChange, onClose }) {
       >
         <MethodHeader method={method} args={args} onChange={onChange} />
         <div className="max-h-[440px] overflow-y-auto px-3 py-3">
-          <window.ArgsEditor method={method} args={args} onChange={onChange} />
+          <window.ArgsEditor method={method} args={args} onChange={onChange} fields={fields} ownField={ownField} refVariant={refVariant} />
         </div>
       </div>
     </>,
@@ -93,7 +93,7 @@ function ArgsPopover({ anchorRef, open, method, args, onChange, onClose }) {
 }
 
 // ---------- inline variant ----------
-function ArgsInline({ method, args, onChange, onClose }) {
+function ArgsInline({ method, args, onChange, onClose, fields, ownField, refVariant }) {
   return (
     <div className="border-t border-dashed border-border bg-muted/30">
       <div className="grid grid-cols-[20px_20px_minmax(140px,1fr)] items-stretch">
@@ -117,7 +117,7 @@ function ArgsInline({ method, args, onChange, onClose }) {
             </button>
           </div>
           <div className="px-3 pb-3">
-            <window.ArgsEditor method={method} args={args} onChange={onChange} density="compact" />
+            <window.ArgsEditor method={method} args={args} onChange={onChange} density="compact" fields={fields} ownField={ownField} refVariant={refVariant} />
             <div className="mt-2 flex items-center gap-1.5 rounded-md bg-muted/60 px-2 py-1.5 font-mono text-[10.5px] text-muted-foreground">
               <span className="text-foreground/60">→</span>
               <span className="truncate text-foreground">{String(window.SchemaModule.previewValue(method, args))}</span>
@@ -130,7 +130,7 @@ function ArgsInline({ method, args, onChange, onClose }) {
 }
 
 // ---------- side-panel variant ----------
-function ArgsSidePanel({ method, args, onChange, onClose, fieldPath }) {
+function ArgsSidePanel({ method, args, onChange, onClose, fieldPath, fields, ownField, refVariant }) {
   return (
     <aside className="flex h-full w-[380px] flex-none flex-col border-l border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -156,7 +156,7 @@ function ArgsSidePanel({ method, args, onChange, onClose, fieldPath }) {
         <>
           <MethodHeader method={method} args={args} onChange={onChange} />
           <div className="flex-1 overflow-y-auto px-3 py-3">
-            <window.ArgsEditor method={method} args={args} onChange={onChange} />
+            <window.ArgsEditor method={method} args={args} onChange={onChange} fields={fields} ownField={ownField} refVariant={refVariant} />
           </div>
         </>
       )}
