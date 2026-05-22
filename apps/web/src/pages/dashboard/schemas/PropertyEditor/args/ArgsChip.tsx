@@ -3,6 +3,7 @@ import { Sliders } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
 import { FAKER_CATALOG } from '@mirage/fakerjs';
 import { ArgsPopover } from './ArgsPopover.js';
+import type { RefField } from './field-renderers/RefMentionInput.js';
 import { toInternal, type ArgsStored } from './serialize.js';
 import { validateArgs } from './validate.js';
 
@@ -10,12 +11,14 @@ export interface ArgsChipProps {
   method: string;
   stored: ArgsStored | undefined;
   onChange: (next: ArgsStored | undefined) => void;
+  fields?: RefField[];
+  ownField?: string;
 }
 
 const REF_PREFIX = '$ref:';
 const FN_PREFIX = '$fn:';
 
-export function ArgsChip({ method, stored, onChange }: ArgsChipProps) {
+export function ArgsChip({ method, stored, onChange, fields, ownField }: ArgsChipProps) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -57,6 +60,8 @@ export function ArgsChip({ method, stored, onChange }: ArgsChipProps) {
         stored={stored}
         onChange={onChange}
         onClose={() => setOpen(false)}
+        {...(fields ? { fields } : {})}
+        {...(ownField !== undefined ? { ownField } : {})}
       />
     </>
   );

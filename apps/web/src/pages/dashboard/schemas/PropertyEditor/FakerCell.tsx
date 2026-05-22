@@ -9,6 +9,7 @@ import { bff } from '../../../../api/client.js';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { FAKER_GROUPS, FN_PREFIX, REF_PREFIX } from '../lib/types.js';
 import { ArgsChip } from './args/ArgsChip.js';
+import type { RefField } from './args/field-renderers/RefMentionInput.js';
 import type { ArgsStored } from './args/serialize.js';
 
 type CustomFunction = Api.components['schemas']['CustomFunction'];
@@ -22,6 +23,8 @@ export interface FakerCellProps {
   invalid: boolean;
   fakerArgs: ArgsStored | undefined;
   onFakerArgsChange: (next: ArgsStored | undefined) => void;
+  argRefFields?: RefField[];
+  ownFieldName?: string;
 }
 
 export function FakerCell({
@@ -33,6 +36,8 @@ export function FakerCell({
   invalid,
   fakerArgs,
   onFakerArgsChange,
+  argRefFields,
+  ownFieldName,
 }: FakerCellProps) {
   const { wsId } = useParams<{ wsId: string }>();
   const isRef = value.startsWith(REF_PREFIX);
@@ -171,7 +176,13 @@ export function FakerCell({
         )}
         <ChevronDown size={11} className="ml-auto flex-none text-muted-foreground" />
       </button>
-      <ArgsChip method={value} stored={fakerArgs} onChange={onFakerArgsChange} />
+      <ArgsChip
+        method={value}
+        stored={fakerArgs}
+        onChange={onFakerArgsChange}
+        {...(argRefFields ? { fields: argRefFields } : {})}
+        {...(ownFieldName !== undefined ? { ownField: ownFieldName } : {})}
+      />
       {open && pos && createPortal(
         <>
           <div className="fixed inset-0 z-30" onClick={onToggle} />

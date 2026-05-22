@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import { createPortal } from 'react-dom';
 import { FAKER_CATALOG } from '@mirage/fakerjs';
 import { ArgsEditor } from './ArgsEditor.js';
+import type { RefField } from './field-renderers/RefMentionInput.js';
 import type { ArgsStored } from './serialize.js';
 
 export interface ArgsPopoverProps {
@@ -11,6 +12,8 @@ export interface ArgsPopoverProps {
   stored: ArgsStored | undefined;
   onChange: (next: ArgsStored | undefined) => void;
   onClose: () => void;
+  fields?: RefField[];
+  ownField?: string;
 }
 
 export function ArgsPopover({
@@ -20,6 +23,8 @@ export function ArgsPopover({
   stored,
   onChange,
   onClose,
+  fields,
+  ownField,
 }: ArgsPopoverProps) {
   const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
   const popRef = useRef<HTMLDivElement>(null);
@@ -94,7 +99,13 @@ export function ArgsPopover({
           </button>
         </div>
         <div className="max-h-[440px] overflow-y-auto px-3 py-3">
-          <ArgsEditor method={method} stored={stored} onChange={onChange} />
+          <ArgsEditor
+            method={method}
+            stored={stored}
+            onChange={onChange}
+            {...(fields ? { fields } : {})}
+            {...(ownField !== undefined ? { ownField } : {})}
+          />
         </div>
       </div>
     </>,

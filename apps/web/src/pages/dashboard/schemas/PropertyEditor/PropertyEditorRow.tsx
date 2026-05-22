@@ -6,6 +6,7 @@ import type { Schema, SchemaProp } from '../lib/types.js';
 import { TYPE_OPTIONS } from '../lib/types.js';
 import type { ValidationIssue } from '../lib/validateTree.js';
 import { FakerCell } from './FakerCell.js';
+import type { RefField } from './args/field-renderers/RefMentionInput.js';
 import type { ArgsStored } from './args/serialize.js';
 
 export interface PropertyEditorRowProps {
@@ -21,6 +22,7 @@ export interface PropertyEditorRowProps {
   errorChildren?: React.ReactNode;
   selected: boolean;
   onSelect: () => void;
+  siblingFields: RefField[];
 }
 
 export function PropertyEditorRow({
@@ -36,6 +38,7 @@ export function PropertyEditorRow({
   errorChildren,
   selected,
   onSelect,
+  siblingFields,
 }: PropertyEditorRowProps) {
   const isContainer = row.type === 'object' || row.type === 'array';
   const [expanded, setExpanded] = useState(true);
@@ -161,6 +164,8 @@ export function PropertyEditorRow({
                 return updated;
               })
             }
+            argRefFields={siblingFields}
+            ownFieldName={row.name}
           />
         )}
 

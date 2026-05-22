@@ -10,6 +10,7 @@ import {
   ArrayField,
   RegexField,
 } from './field-renderers/index.js';
+import type { RefField } from './field-renderers/RefMentionInput.js';
 import {
   toInternal,
   toStored,
@@ -22,6 +23,8 @@ export interface ArgsEditorProps {
   method: string;
   stored: ArgsStored | undefined;
   onChange: (next: ArgsStored | undefined) => void;
+  fields?: RefField[];
+  ownField?: string;
 }
 
 function renderField(
@@ -29,6 +32,8 @@ function renderField(
   value: unknown,
   onChange: (v: unknown) => void,
   invalid: boolean,
+  fields: RefField[] | undefined,
+  ownField: string | undefined,
 ) {
   switch (param.kind) {
     case 'integer':
@@ -36,7 +41,16 @@ function renderField(
     case 'number':
       return <NumberField param={param} value={value} onChange={onChange as (v: number | undefined) => void} invalid={invalid} />;
     case 'string':
-      return <StringField param={param} value={value} onChange={onChange as (v: string | undefined) => void} invalid={invalid} />;
+      return (
+        <StringField
+          param={param}
+          value={value}
+          onChange={onChange as (v: string | undefined) => void}
+          invalid={invalid}
+          {...(fields ? { fields } : {})}
+          {...(ownField !== undefined ? { ownField } : {})}
+        />
+      );
     case 'boolean':
       return <BooleanField param={param} value={value} onChange={onChange as (v: boolean | undefined) => void} />;
     case 'enum':
@@ -50,7 +64,7 @@ function renderField(
   }
 }
 
-export function ArgsEditor({ method, stored, onChange }: ArgsEditorProps) {
+export function ArgsEditor({ method, stored, onChange, fields, ownField }: ArgsEditorProps) {
   const entry: MethodEntry | undefined = FAKER_CATALOG[method];
   const [advanced, setAdvanced] = useState(false);
   const [internal, setInternal] = useState<ArgsInternal>(() => toInternal(entry, stored));
@@ -120,6 +134,8 @@ export function ArgsEditor({ method, stored, onChange }: ArgsEditorProps) {
               internal[p.name],
               (v) => setParam(p.name, v),
               validation?.paramName === p.name,
+              fields,
+              ownField,
             )}
           </div>
         ))}

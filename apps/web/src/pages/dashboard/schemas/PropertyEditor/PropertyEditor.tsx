@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import type { Schema, SchemaProp } from '../lib/types.js';
 import { validateTree, type ValidationIssue } from '../lib/validateTree.js';
 import { PropertyEditorRow, makeProp } from './PropertyEditorRow.js';
+import type { RefField } from './args/field-renderers/RefMentionInput.js';
 
 export interface PropertyEditorProps {
   rows: SchemaProp[];
@@ -85,6 +86,14 @@ function NestedBuilder(props: NestedBuilderProps) {
   } = props;
   const [pickerOpenIdx, setPickerOpenIdx] = useState<number | null>(null);
 
+  const allSiblings = useMemo<RefField[]>(
+    () =>
+      rows
+        .filter((r) => r.type !== 'object' && r.type !== 'array' && r.name)
+        .map((r) => ({ name: r.name, type: r.type })),
+    [rows],
+  );
+
   const updateRow = (
     idx: number,
     patch: Partial<SchemaProp> | ((r: SchemaProp) => SchemaProp),
@@ -127,6 +136,7 @@ function NestedBuilder(props: NestedBuilderProps) {
             removeRow={() => removeRow(idx)}
             selected={path === selectedPath}
             onSelect={() => onSelectPath(path)}
+            siblingFields={allSiblings}
             {...(err ? { error: err } : {})}
             errorChildren={(() => {
               if (row.type === 'object') {
