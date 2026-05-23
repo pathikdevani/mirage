@@ -40,7 +40,8 @@ export function IdentityPopover({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex items-center gap-2 rounded-md border border-input bg-background px-2 py-1 text-[12px] hover:border-foreground/40',
+          'inline-flex items-center gap-2 rounded-md border border-input bg-background text-[12px] hover:border-foreground/40',
+          compact ? 'p-1' : 'px-2 py-1',
           triggerClassName,
         )}
         aria-haspopup="dialog"
