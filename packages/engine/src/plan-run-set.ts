@@ -6,7 +6,7 @@ import { detectCycles, topoSortWithSoftCycles } from './topology.js';
 type MirageSet = Api.components['schemas']['Set'];
 type Schema = Api.components['schemas']['Schema'];
 
-export const MAX_ROWS_PER_SCHEMA = 1_000_000;
+export const MAX_ROWS_PER_SCHEMA = 100_000_000;
 
 export interface SoftCycleSchemaSeed {
   schemaKey: string;

@@ -1,3 +1,4 @@
+import { MAX_ROWS_PER_SCHEMA } from '@mirage/engine';
 import {
   KEY_RE,
   OUTPUT_FORMATS,
@@ -44,10 +45,10 @@ export function validateSet(body: CreateSetBody): SetValidationIssue[] {
       if (!KEY_RE.test(inc.schemaKey)) {
         out.push({ field: 'schemas', message: `Invalid schemaKey: ${inc.schemaKey}` });
       }
-      if (!Number.isInteger(inc.count) || inc.count < 0 || inc.count > 10_000_000) {
+      if (!Number.isInteger(inc.count) || inc.count < 0 || inc.count > MAX_ROWS_PER_SCHEMA) {
         out.push({
           field: 'schemas',
-          message: `Count for ${inc.schemaKey} must be 0..10,000,000.`,
+          message: `Count for ${inc.schemaKey} must be 0..${MAX_ROWS_PER_SCHEMA.toLocaleString('en-US')}.`,
         });
       }
     }

@@ -1,6 +1,7 @@
 import type { ChangeEvent } from 'react';
 import { Check, Database, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
+import { MAX_ROWS_PER_SCHEMA } from '@mirage/engine';
 import { BRAND_COLOR_BG } from '../lib/colors.js';
 import { IconByName } from '../lib/icon.js';
 import type { SetSchemaInclusion } from '../lib/types.js';
@@ -50,7 +51,7 @@ export function Step2Schemas({
     const n = Number.parseInt(v.replaceAll(/\D/g, '') || '0', 10);
     setInclusions(
       inclusions.map((i) =>
-        i.schemaKey === schemaKey ? { ...i, count: Math.min(10_000_000, Math.max(0, n)) } : i,
+        i.schemaKey === schemaKey ? { ...i, count: Math.min(MAX_ROWS_PER_SCHEMA, Math.max(0, n)) } : i,
       ),
     );
   };

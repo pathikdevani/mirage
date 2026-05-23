@@ -2,6 +2,7 @@ import { useState, type ChangeEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import { cn } from '@mirage/ui-kit';
+import { MAX_ROWS_PER_SCHEMA } from '@mirage/engine';
 import { bff } from '../../../api/client.js';
 import { OUTPUT_FORMATS, type MirageSet, type SetSchemaInclusion } from './lib/types.js';
 import { IconByName } from './lib/icon.js';
@@ -58,7 +59,7 @@ export function ConfigTab({
     const n = Number.parseInt(v.replaceAll(/\D/g, '') || '0', 10);
     update((next) => {
       const inc = next.schemas[idx];
-      if (inc) inc.count = Math.min(10_000_000, Math.max(0, n));
+      if (inc) inc.count = Math.min(MAX_ROWS_PER_SCHEMA, Math.max(0, n));
       return next;
     });
   };
