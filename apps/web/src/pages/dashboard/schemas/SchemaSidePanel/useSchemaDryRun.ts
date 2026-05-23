@@ -23,8 +23,19 @@ export interface EngineErrorDetail {
   code: string;
   fieldPath?: string;
   cycle?: string[];
+  hops?: ValueCycleHop[];
   /** Any other engine detail keys we didn't pull up. */
   rest: Record<string, unknown>;
+}
+
+export type CycleVia =
+  | { kind: 'method_arg'; method: string; arg: string }
+  | { kind: 'fn_arg'; functionId: string; arg: string };
+
+export interface ValueCycleHop {
+  from: string;
+  to: string;
+  via: CycleVia | null;
 }
 
 export interface DryRunState {
@@ -55,6 +66,30 @@ interface RawErrorBody {
   detail?: unknown;
 }
 
+function parseHops(v: unknown): ValueCycleHop[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: ValueCycleHop[] = [];
+  for (const item of v) {
+    if (!item || typeof item !== 'object') return undefined;
+    const o = item as Record<string, unknown>;
+    if (typeof o['from'] !== 'string' || typeof o['to'] !== 'string') return undefined;
+    out.push({ from: o['from'], to: o['to'], via: parseVia(o['via']) });
+  }
+  return out;
+}
+
+function parseVia(v: unknown): CycleVia | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (o['kind'] === 'method_arg' && typeof o['method'] === 'string' && typeof o['arg'] === 'string') {
+    return { kind: 'method_arg', method: o['method'], arg: o['arg'] };
+  }
+  if (o['kind'] === 'fn_arg' && typeof o['functionId'] === 'string' && typeof o['arg'] === 'string') {
+    return { kind: 'fn_arg', functionId: o['functionId'], arg: o['arg'] };
+  }
+  return null;
+}
+
 function parseEngineDetail(detail: unknown): EngineErrorDetail | null {
   if (!detail || typeof detail !== 'object') return null;
   const d = detail as Record<string, unknown>;
@@ -65,13 +100,15 @@ function parseEngineDetail(detail: unknown): EngineErrorDetail | null {
     engineDetail && typeof engineDetail === 'object'
       ? (engineDetail as Record<string, unknown>)
       : {};
-  const { fieldPath, cycle, ...rest } = inner;
+  const { fieldPath, cycle, hops, ...rest } = inner;
+  const parsedHops = parseHops(hops);
   return {
     code: engineCode,
     ...(typeof fieldPath === 'string' ? { fieldPath } : {}),
     ...(Array.isArray(cycle) && cycle.every((c) => typeof c === 'string')
       ? { cycle: cycle as string[] }
       : {}),
+    ...(parsedHops ? { hops: parsedHops } : {}),
     rest,
   };
 }

@@ -42,10 +42,27 @@ export async function* generateRows(params: GenerateRowsParams): AsyncIterable<R
       customFunctions,
       sandbox,
       fieldPath: '',
+      callsite: null,
       evalNamed: async () => undefined,
     });
     yield { __schemaKey: schema.key, __id: rowId, ...fields };
   }
+}
+
+/**
+ * Where a value reference was made inside a property's expression. Used to
+ * annotate `value_cycle` hops so the UI can show "internet.email[firstName]"
+ * instead of a bare field name.
+ */
+export type Callsite =
+  | { kind: 'method_arg'; method: string; arg: string }
+  | { kind: 'fn_arg'; functionId: string; arg: string };
+
+export interface ValueCycleHop {
+  from: string;
+  to: string;
+  /** `null` for plain top-level field references with no surrounding callsite. */
+  via: Callsite | null;
 }
 
 interface ResolvePropContext {
@@ -58,7 +75,9 @@ interface ResolvePropContext {
   customFunctions: CustomFunctionRegistry;
   sandbox: SandboxPool;
   fieldPath: string;
-  evalNamed: (name: string) => Promise<unknown>;
+  /** Innermost surrounding callsite when a `field` segment fires. Null at top-level. */
+  callsite: Callsite | null;
+  evalNamed: (name: string, via: Callsite | null) => Promise<unknown>;
 }
 
 /**
@@ -75,29 +94,54 @@ async function evalTopLevelRow(
 
   const memo = new Map<string, unknown>();
   const evaluating = new Set<string>();
+  const evalStack: Array<{ name: string; incomingVia: Callsite | null }> = [];
 
-  const evalNamed = async (name: string): Promise<unknown> => {
+  const evalNamed = async (name: string, incomingVia: Callsite | null): Promise<unknown> => {
     if (memo.has(name)) return memo.get(name);
     if (evaluating.has(name)) {
+      const startIdx = evalStack.findIndex((f) => f.name === name);
+      const hops: ValueCycleHop[] = [];
+      if (startIdx >= 0) {
+        for (let i = startIdx; i < evalStack.length - 1; i++) {
+          hops.push({
+            from: evalStack[i]!.name,
+            to: evalStack[i + 1]!.name,
+            via: evalStack[i + 1]!.incomingVia,
+          });
+        }
+        hops.push({
+          from: evalStack[evalStack.length - 1]!.name,
+          to: name,
+          via: incomingVia,
+        });
+      }
       throw new EngineError('value_cycle', {
         fieldPath: name,
         cycle: [...evaluating, name],
+        hops,
       });
     }
     const p = byName.get(name);
     if (!p) return undefined;
     evaluating.add(name);
+    evalStack.push({ name, incomingVia });
     try {
-      const v = await resolveProp(p, { ...ctxBase, fieldPath: name, evalNamed });
+      const v = await resolveProp(p, {
+        ...ctxBase,
+        fieldPath: name,
+        callsite: null,
+        evalNamed,
+      });
       memo.set(name, v);
       return v;
     } finally {
       evaluating.delete(name);
+      evalStack.pop();
     }
   };
 
   const out: Record<string, unknown> = {};
-  for (const p of props) out[p.name] = await evalNamed(p.name);
+  for (const p of props) out[p.name] = await evalNamed(p.name, null);
   return out;
 }
 
@@ -201,8 +245,7 @@ async function evalSegment(seg: ValueSegment, ctx: ResolvePropContext): Promise<
     case 'field':
       return resolveFieldByDottedPath(seg.name, ctx);
     case 'method': {
-      const resolvedArgs =
-        seg.args === undefined ? undefined : await resolveArg(seg.args, ctx);
+      const resolvedArgs = await resolveMethodArgs(seg.method, seg.args, ctx);
       return ctx.fakerEngine.call(
         seg.method,
         resolvedArgs as Parameters<typeof ctx.fakerEngine.call>[1],
@@ -254,12 +297,37 @@ async function resolveFieldByDottedPath(
 ): Promise<unknown> {
   const parts = path.split('.');
   const head = parts[0]!;
-  let cursor = await ctx.evalNamed(head);
+  let cursor = await ctx.evalNamed(head, ctx.callsite);
   for (let i = 1; i < parts.length; i++) {
     if (cursor == null || typeof cursor !== 'object') return undefined;
     cursor = (cursor as Record<string, unknown>)[parts[i]!];
   }
   return cursor;
+}
+
+/**
+ * Iterate named args of a method, setting `ctx.callsite` so that any `field`
+ * segment fired during arg evaluation can attribute its read to the right
+ * method+arg. Non-record arg shapes fall back to the generic walker.
+ */
+async function resolveMethodArgs(
+  method: string,
+  args: unknown,
+  ctx: ResolvePropContext,
+): Promise<unknown> {
+  if (args === undefined) return undefined;
+  if (args === null || Array.isArray(args) || typeof args !== 'object') {
+    return resolveArg(args, ctx);
+  }
+  const out: Record<string, unknown> = {};
+  for (const [argName, argVal] of Object.entries(args as Record<string, unknown>)) {
+    const argCtx: ResolvePropContext = {
+      ...ctx,
+      callsite: { kind: 'method_arg', method, arg: argName },
+    };
+    out[argName] = await resolveArg(argVal, argCtx);
+  }
+  return out;
 }
 
 // Re-export ValueExpr so consumers of engine internals (tests) can name it.

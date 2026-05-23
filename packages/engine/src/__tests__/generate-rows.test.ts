@@ -265,6 +265,69 @@ describe('value-template evaluation', () => {
     await expect(drain(sch)).rejects.toThrow(/value_cycle/);
   });
 
+  it('value_cycle detail carries method[arg] hops when field refs live in method args', async () => {
+    const sch = schema([
+      {
+        name: 'email',
+        type: 'string',
+        required: false,
+        value: [
+          {
+            kind: 'method',
+            method: 'internet.email',
+            args: { firstName: [{ kind: 'field', name: 'email_faker' }] },
+          },
+        ],
+      },
+      {
+        name: 'email_faker',
+        type: 'string',
+        required: false,
+        value: [
+          {
+            kind: 'method',
+            method: 'internet.email',
+            args: { firstName: [{ kind: 'field', name: 'email' }] },
+          },
+        ],
+      },
+    ]);
+    const err = await drain(sch).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeTruthy();
+    const detail = (err as { detail?: { hops?: unknown } }).detail;
+    expect(detail).toMatchObject({
+      hops: [
+        {
+          from: 'email',
+          to: 'email_faker',
+          via: { kind: 'method_arg', method: 'internet.email', arg: 'firstName' },
+        },
+        {
+          from: 'email_faker',
+          to: 'email',
+          via: { kind: 'method_arg', method: 'internet.email', arg: 'firstName' },
+        },
+      ],
+    });
+  });
+
+  it('value_cycle hop via is null for plain top-level field refs', async () => {
+    const sch = schema([
+      { name: 'a', type: 'string', required: false, value: [{ kind: 'field', name: 'b' }] },
+      { name: 'b', type: 'string', required: false, value: [{ kind: 'field', name: 'a' }] },
+    ]);
+    const err = await drain(sch).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    const detail = (err as { detail?: { hops?: Array<{ via: unknown }> } }).detail;
+    expect(detail?.hops?.[0]?.via).toBeNull();
+    expect(detail?.hops?.[1]?.via).toBeNull();
+  });
+
   it('returns null when value is undefined', async () => {
     const sch = schema([{ name: 'x', type: 'string', required: false }]);
     const [row] = await drain(sch);

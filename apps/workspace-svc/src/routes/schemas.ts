@@ -50,9 +50,35 @@ function err(code: string, message: string, detail?: unknown): ValidationError {
   return detail === undefined ? { code, message } : { code, message, detail };
 }
 
+interface ValueCycleVia {
+  kind: 'method_arg' | 'fn_arg';
+  method?: string;
+  functionId?: string;
+  arg: string;
+}
+interface ValueCycleHop {
+  from: string;
+  to: string;
+  via: ValueCycleVia | null;
+}
+
+function formatVia(via: ValueCycleVia | null): string {
+  if (!via) return '';
+  if (via.kind === 'method_arg' && via.method) return ` (${via.method}[${via.arg}])`;
+  if (via.kind === 'fn_arg' && via.functionId) return ` (fn:${via.functionId}[${via.arg}])`;
+  return '';
+}
+
 function humanizeEngineError(e: EngineError): string {
   if (e.code === 'value_cycle') {
-    const d = e.detail as { fieldPath?: string; cycle?: string[] } | undefined;
+    const d = e.detail as
+      | { fieldPath?: string; cycle?: string[]; hops?: ValueCycleHop[] }
+      | undefined;
+    if (d?.hops?.length) {
+      const parts: string[] = [d.hops[0]!.from];
+      for (const h of d.hops) parts.push(`${formatVia(h.via)} → ${h.to}`);
+      return `Field value cycle: ${parts.join('')}`;
+    }
     const cycle = d?.cycle?.length ? d.cycle.join(' → ') : d?.fieldPath ?? 'unknown';
     return `Field value cycle: ${cycle}`;
   }

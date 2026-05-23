@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Api } from '@mirage/types';
 import type { Schema } from '../lib/types.js';
-import type { PreviewError } from './useSchemaDryRun.js';
+import type { CycleVia, PreviewError, ValueCycleHop } from './useSchemaDryRun.js';
 import { JsonNode } from './JsonNode.js';
 
 type DryRunResponse = Api.components['schemas']['DryRunSchemaResponse'];
@@ -155,11 +155,18 @@ function PreviewErrorCard({ kind, err }: PreviewErrorCardProps) {
                   <span className="text-foreground">{engine.fieldPath}</span>
                 </div>
               )}
-              {engine.cycle && engine.cycle.length > 0 && (
+              {engine.hops && engine.hops.length > 0 ? (
                 <div>
-                  <span className="text-muted-foreground">cycle:</span>{' '}
-                  <span className="text-foreground">{engine.cycle.join(' → ')}</span>
+                  <div className="text-muted-foreground">cycle:</div>
+                  <CycleHops hops={engine.hops} />
                 </div>
+              ) : (
+                engine.cycle && engine.cycle.length > 0 && (
+                  <div>
+                    <span className="text-muted-foreground">cycle:</span>{' '}
+                    <span className="text-foreground">{engine.cycle.join(' → ')}</span>
+                  </div>
+                )
               )}
               {Object.entries(engine.rest).map(([k, v]) => (
                 <div key={k} className="break-all">
@@ -207,4 +214,39 @@ function stringify(v: unknown): string {
   } catch {
     return String(v);
   }
+}
+
+function CycleHops({ hops }: { hops: ValueCycleHop[] }) {
+  const first = hops[0];
+  if (!first) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-foreground">
+      <span className="rounded bg-foreground/10 px-1">{first.from}</span>
+      {hops.map((h, i) => (
+        <span key={i} className="flex items-center gap-1">
+          <ViaLabel via={h.via} />
+          <span aria-hidden>→</span>
+          <span className="rounded bg-foreground/10 px-1">{h.to}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ViaLabel({ via }: { via: CycleVia | null }) {
+  if (!via) return null;
+  if (via.kind === 'method_arg') {
+    return (
+      <span className="text-muted-foreground">
+        <span className="text-foreground">{via.method}</span>[
+        <span className="text-foreground">{via.arg}</span>]
+      </span>
+    );
+  }
+  return (
+    <span className="text-muted-foreground">
+      fn:<span className="text-foreground">{via.functionId}</span>[
+      <span className="text-foreground">{via.arg}</span>]
+    </span>
+  );
 }
