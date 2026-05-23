@@ -14,6 +14,7 @@ import {
   classifyRefEdge,
   customFunctionRegistryFromMap,
   dryRunSchema,
+  EngineError,
   type CustomFunctionEntry,
 } from '@mirage/engine';
 import type { MirageDb, SchemaDoc } from '../db.js';
@@ -47,6 +48,15 @@ interface ValidationError {
 
 function err(code: string, message: string, detail?: unknown): ValidationError {
   return detail === undefined ? { code, message } : { code, message, detail };
+}
+
+function humanizeEngineError(e: EngineError): string {
+  if (e.code === 'value_cycle') {
+    const d = e.detail as { fieldPath?: string; cycle?: string[] } | undefined;
+    const cycle = d?.cycle?.length ? d.cycle.join(' → ') : d?.fieldPath ?? 'unknown';
+    return `Field value cycle: ${cycle}`;
+  }
+  return e.message;
 }
 
 function validateProps(properties: SchemaProp[]): ValidationError | null {
@@ -435,8 +445,15 @@ export function registerSchemaRoutes(app: FastifyInstance, db: MirageDb): void {
       });
       return reply.send(result);
     } catch (e) {
+      if (e instanceof EngineError) {
+        return reply.code(500).send({
+          error: humanizeEngineError(e),
+          code: 'preview_failed',
+          detail: { engineCode: e.code, engineDetail: e.detail, raw: e.message },
+        });
+      }
       const msg = e instanceof Error ? e.message : 'preview generation failed';
-      return reply.code(500).send(err('preview_failed', msg));
+      return reply.code(500).send({ error: msg, code: 'preview_failed' });
     }
   });
 

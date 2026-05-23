@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Api } from '@mirage/types';
 import type { Schema } from '../lib/types.js';
+import type { PreviewError } from './useSchemaDryRun.js';
 import { JsonNode } from './JsonNode.js';
 
 type DryRunResponse = Api.components['schemas']['DryRunSchemaResponse'];
@@ -12,8 +13,8 @@ export interface PreviewTabContentProps {
   onCountChange: (n: number) => void;
   data: DryRunResponse | null;
   isLoading: boolean;
-  error: string | null;
-  validationError: string | null;
+  error: PreviewError | null;
+  validationError: PreviewError | null;
 }
 
 export function PreviewTabContent({
@@ -47,14 +48,9 @@ export function PreviewTabContent({
 
       <div className="flex-1 overflow-y-auto px-4 py-3 text-[12px] font-mono">
         {validationError ? (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 font-sans text-[12px] text-amber-700 dark:text-amber-400">
-            <div className="font-medium">Fix errors to preview</div>
-            <div className="mt-1 text-muted-foreground">{validationError}</div>
-          </div>
+          <PreviewErrorCard kind="validation" err={validationError} />
         ) : error ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 font-sans text-[12px] text-destructive">
-            Preview unavailable: {error}
-          </div>
+          <PreviewErrorCard kind="error" err={error} />
         ) : !data ? (
           <div className="text-muted-foreground font-sans">Generating preview…</div>
         ) : (
@@ -114,4 +110,101 @@ function Section({ title, count, subtitle, defaultOpen = false, children }: Sect
       {open && <div className="min-w-0 border-t border-border px-3 py-2">{children}</div>}
     </div>
   );
+}
+
+interface PreviewErrorCardProps {
+  kind: 'validation' | 'error';
+  err: PreviewError;
+}
+
+function PreviewErrorCard({ kind, err }: PreviewErrorCardProps) {
+  const [showRaw, setShowRaw] = useState(false);
+  const isValidation = kind === 'validation';
+  const tone = isValidation
+    ? 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400'
+    : 'border-destructive/30 bg-destructive/5 text-destructive';
+  const heading = isValidation
+    ? 'Fix errors to preview'
+    : err.code
+      ? `Preview failed · ${err.code}`
+      : 'Preview failed';
+
+  const engine = err.engine;
+  const extraDetail =
+    !engine && err.detail && typeof err.detail === 'object'
+      ? (err.detail as Record<string, unknown>)
+      : null;
+
+  return (
+    <div className={`rounded-md border px-3 py-2 font-sans text-[12px] ${tone}`}>
+      <div className="flex items-start gap-2">
+        <AlertTriangle size={13} className="mt-[2px] flex-none" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">{heading}</div>
+          <div className="mt-1 text-muted-foreground">{err.message}</div>
+
+          {engine && (
+            <div className="mt-2 space-y-1 rounded border border-current/20 bg-background/60 p-2 font-mono text-[11.5px]">
+              <div>
+                <span className="text-muted-foreground">engine code:</span>{' '}
+                <span className="text-foreground">{engine.code}</span>
+              </div>
+              {engine.fieldPath && (
+                <div>
+                  <span className="text-muted-foreground">field:</span>{' '}
+                  <span className="text-foreground">{engine.fieldPath}</span>
+                </div>
+              )}
+              {engine.cycle && engine.cycle.length > 0 && (
+                <div>
+                  <span className="text-muted-foreground">cycle:</span>{' '}
+                  <span className="text-foreground">{engine.cycle.join(' → ')}</span>
+                </div>
+              )}
+              {Object.entries(engine.rest).map(([k, v]) => (
+                <div key={k} className="break-all">
+                  <span className="text-muted-foreground">{k}:</span>{' '}
+                  <span className="text-foreground">{stringify(v)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {extraDetail && (
+            <pre className="mt-2 max-h-40 overflow-auto rounded border border-current/20 bg-background/60 p-2 font-mono text-[11px] text-foreground">
+              {JSON.stringify(extraDetail, null, 2)}
+            </pre>
+          )}
+
+          {(err.status !== undefined || err.code) && (
+            <button
+              type="button"
+              onClick={() => setShowRaw((v) => !v)}
+              className="mt-2 text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+            >
+              {showRaw ? 'Hide' : 'Show'} raw response
+            </button>
+          )}
+          {showRaw && (
+            <pre className="mt-1 max-h-60 overflow-auto rounded border border-current/20 bg-background/60 p-2 font-mono text-[11px] text-foreground">
+              {JSON.stringify(
+                { status: err.status, code: err.code, message: err.message, detail: err.detail },
+                null,
+                2,
+              )}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function stringify(v: unknown): string {
+  if (typeof v === 'string') return v;
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
 }
